@@ -1,0 +1,9 @@
+/home/liurenju/Desktop/research/iccad-2020/wasm-micro-runtime/product-mini/platforms/linux/build-jit/CMakeFiles/install/strip.dir
+/home/liurenju/Desktop/research/iccad-2020/wasm-micro-runtime/product-mini/platforms/linux/build-jit/CMakeFiles/install/local.dir
+/home/liurenju/Desktop/research/iccad-2020/wasm-micro-runtime/product-mini/platforms/linux/build-jit/CMakeFiles/install.dir
+/home/liurenju/Desktop/research/iccad-2020/wasm-micro-runtime/product-mini/platforms/linux/build-jit/CMakeFiles/vmlib.dir
+/home/liurenju/Desktop/research/iccad-2020/wasm-micro-runtime/product-mini/platforms/linux/build-jit/CMakeFiles/libiwasm.dir
+/home/liurenju/Desktop/research/iccad-2020/wasm-micro-runtime/product-mini/platforms/linux/build-jit/CMakeFiles/edit_cache.dir
+/home/liurenju/Desktop/research/iccad-2020/wasm-micro-runtime/product-mini/platforms/linux/build-jit/CMakeFiles/rebuild_cache.dir
+/home/liurenju/Desktop/research/iccad-2020/wasm-micro-runtime/product-mini/platforms/linux/build-jit/CMakeFiles/iwasm.dir
+/home/liurenju/Desktop/research/iccad-2020/wasm-micro-runtime/product-mini/platforms/linux/build-jit/CMakeFiles/list_install_components.dir

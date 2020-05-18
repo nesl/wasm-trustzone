@@ -13,7 +13,13 @@ WebAssembly Micro Runtime (WAMR) is a standalone WebAssembly (WASM) runtime with
 
 - The **dynamic management** of the WASM applications
 
+//////////////////RENJU LIU///////////////////////
 
+This is the wasm part of Aerogel project. Please also follow the instructions on https://github.com/bytecodealliance/wasm-micro-runtime/blob/master/doc/build_wamr.md#zephyr to install the wasm micro-runtime (wamr).
+
+The Zephyr part is in: https://github.com/nesl/zephyr-wasm
+
+/////////////////////////////////////////////////
 
 iwasm VM core
 =========================

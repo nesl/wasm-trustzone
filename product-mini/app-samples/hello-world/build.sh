@@ -3,7 +3,7 @@
 
 WAMR_DIR=${PWD}/../../..
 
-/opt/wasi-sdk/bin/clang     \
+/opt/wasi-sdk-10.0/bin/clang     \
         --target=wasm32 -O3 \
         -z stack-size=4096 -Wl,--initial-memory=65536 \
         --sysroot=${WAMR_DIR}/wamr-sdk/app/libc-builtin-sysroot    \
