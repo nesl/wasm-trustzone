@@ -11,6 +11,9 @@
 #include "mem_alloc.h"
 #include "../common/wasm_runtime_common.h"
 
+uint32* sensor_actuator_concurrent_access;
+uint32 num_sensor_actuator_concurrent_access = 0;
+
 static void
 set_error_buf(char *error_buf, uint32 error_buf_size, const char *string)
 {
@@ -609,6 +612,8 @@ wasm_instantiate(WASMModule *module,
                                         &global_data_size,
                                         error_buf, error_buf_size)))
         return NULL;
+    //(RENJU TODO: Parse the spec sheet for the access control.)
+    
 
     /* Allocate the memory */
     if (!(module_inst = wasm_runtime_malloc((uint32)sizeof(WASMModuleInstance)))) {

@@ -110,7 +110,6 @@ typedef struct SensorActuatorInfo {
   uint32 mmio_address;
   uint32 num_concurrent_access;
   uint32 power;
-  uint32 current_access;
 } SensorActuatorInfo;
 
 // The access control information for each module

@@ -431,4 +431,3 @@ wasm_type_equal(const WASMType *type1, const WASMType *type2)
 #endif
 
 #endif /* end of _WASM_H_ */
-
