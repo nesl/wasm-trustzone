@@ -10,5 +10,5 @@ WAMR_DIR=${PWD}/../../..
         -Wl,--allow-undefined-file=${WAMR_DIR}/wamr-sdk/app/libc-builtin-sysroot/share/defined-symbols.txt \
         -Wl,--export=main, \
         -Wl,--no-threads,--strip-all,--no-entry \
-        -nostdlib -o test.wasm *.c
+        -nostdlib -o renju-hello.wasm renju-hello.c
 #./jeffdump -o test_wasm.h -n wasm_test_file test.wasm

@@ -105,6 +105,30 @@ typedef struct WASMExportFuncInstance {
     WASMFunctionInstance *function;
 } WASMExportFuncInstance;
 
+typedef struct SensorActuatorInfo {
+  uint32 id;
+  uint32 mmio_address;
+  uint32 num_concurrent_access;
+  uint32 power;
+  uint32 current_access;
+} SensorActuatorInfo;
+
+// The access control information for each module
+typedef struct AccessControlModule {
+  char* name;
+  SensorActuatorInfo* authorized_sensor_actuator;
+  uint32* sensor_actuator_power_consumption;
+  uint32 num_authorized_sensor_actuator;
+  uint32 processor_power_consumption;
+  uint32 memory_consumption;
+} AccessControlModule;
+
+typedef struct AccessControl {
+  AccessControlModule* module_info;
+  uint32 num_module_info;
+  uint32 processor_power;
+} AccessControl;
+
 typedef struct WASMModuleInstance {
     /* Module instance type, for module instance loaded from
        WASM bytecode binary, this field is Wasm_Module_Bytecode;
@@ -152,6 +176,8 @@ typedef struct WASMModuleInstance {
 
     /* Main exec env */
     WASMExecEnv *main_exec_env;
+
+    AccessControl *access_control;
 } WASMModuleInstance;
 
 struct WASMInterpFrame;
@@ -288,4 +314,3 @@ wasm_call_indirect(WASMExecEnv *exec_env,
 #endif
 
 #endif /* end of _WASM_RUNTIME_H */
-

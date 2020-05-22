@@ -17,6 +17,8 @@
 #define TEMPLATE_READ_VALUE(Type, p)                    \
     (p += sizeof(Type), *(Type *)(p - sizeof(Type)))
 
+
+
 static void
 set_error_buf(char *error_buf, uint32 error_buf_size, const char *string)
 {
@@ -1886,7 +1888,6 @@ load(const uint8 *buf, uint32 size, WASMModule *module,
         destroy_sections(section_list);
         return false;
     }
-
     destroy_sections(section_list);
     return true;
 }
@@ -1895,7 +1896,6 @@ WASMModule*
 wasm_loader_load(const uint8 *buf, uint32 size, char *error_buf, uint32 error_buf_size)
 {
     WASMModule *module = wasm_runtime_malloc(sizeof(WASMModule));
-
     if (!module) {
         set_error_buf(error_buf, error_buf_size,
                 "WASM module load failed: allocate memory failed.");
@@ -1908,7 +1908,6 @@ wasm_loader_load(const uint8 *buf, uint32 size, char *error_buf, uint32 error_bu
 
     /* Set start_function to -1, means no start function */
     module->start_function = (uint32)-1;
-
     if (!load(buf, size, module, error_buf, error_buf_size))
         goto fail;
 
