@@ -10,9 +10,8 @@
 #include "bh_log.h"
 #include "mem_alloc.h"
 #include "../common/wasm_runtime_common.h"
-
-uint32* sensor_actuator_concurrent_access;
-uint32 num_sensor_actuator_concurrent_access = 0;
+#include "access_control_spec.h"
+#include "../include/access_control_global_variable.h"
 
 static void
 set_error_buf(char *error_buf, uint32 error_buf_size, const char *string)
@@ -575,6 +574,57 @@ execute_start_function(WASMModuleInstance *module_inst)
     return wasm_create_exec_env_and_call_function(module_inst, func, 0, NULL);
 }
 
+/*
+  Initialize the sensor state information.
+*/
+void
+init_sensor_access(void)
+{
+  int size = strlen(device_spec) - 1;
+  int i = 0;
+  int j = 0;
+  int k = 0;
+  char tmp[150];
+  char* temp;
+  for(; i < size ; i ++){
+    if(device_spec[i] == '\n'){
+      ++num_sensor_actuator_concurrent_access;
+    }
+  }
+
+  for(i = 0; i < size ; i ++){
+    if(device_spec[i] == '\n'){
+      j = 0;
+      if(!(temp = strstr(tmp, "concurrent_access:"))) {
+        break;
+      }
+
+      temp += strlen("concurrent_access:");
+      sensor_actuator_concurrent_access[k++] = atoi((const char*)temp);
+      memset(tmp, 0, 150);
+    }
+    else {
+      tmp[j++] = device_spec[i];
+    }
+  }
+}
+
+/**
+ * Parse the access control spec sheet.
+ */
+AccessControl*
+parse_access_control_spec(void)
+{
+  AccessControl* access_control = NULL;
+  if(num_sensor_actuator_concurrent_access == 0) {
+    init_sensor_access();
+    // for(int i = 0; i < num_sensor_actuator_concurrent_access; i++){
+    //   printf("con access: %d\n", *(sensor_actuator_concurrent_access + i));
+    // }
+  }
+  return access_control;
+}
+
 /**
  * Instantiate module
  */
@@ -592,6 +642,7 @@ wasm_instantiate(WASMModule *module,
     uint8 *global_data, *global_data_end;
     uint8 *memory_data;
     uint32 *table_data;
+    AccessControl* access_control;
 
     if (!module)
         return NULL;
@@ -613,7 +664,11 @@ wasm_instantiate(WASMModule *module,
                                         error_buf, error_buf_size)))
         return NULL;
     //(RENJU TODO: Parse the spec sheet for the access control.)
-    
+    if(!(access_control = parse_access_control_spec())){
+      set_error_buf(error_buf, error_buf_size, "Access control parsing fail.");
+      globals_deinstantiate(globals);
+      return NULL;
+    }
 
     /* Allocate the memory */
     if (!(module_inst = wasm_runtime_malloc((uint32)sizeof(WASMModuleInstance)))) {
