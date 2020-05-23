@@ -4,13 +4,13 @@
 
 char* device_spec =
 "\
-name:imu,power:10,concurrent_access:50\n\
-name:camera,power:500,concurrent_access:2\n\
-name:motion,power:20,concurrent_access:65\n\
-name:microphone,power:100,concurrent_access:3\n\
-name:speaker,power:400,concurrent_access:1\n\
-name:door_motor,power:300,concurrent_access:1\n\
-name:window_motor,power:350,concurrent_access:1\n\
+name:imu,id:0,address:0x90000000,power:10,concurrent_access:50\n\
+name:camera,id:1,address:0x8ffffffc,power:500,concurrent_access:2\n\
+name:motion,id:2,address:0x8ffffff0,power:20,concurrent_access:65\n\
+name:microphone,id:3,address:0x8FFFFFEC,power:100,concurrent_access:3\n\
+name:speaker,id:4,address:0x8FFFFFE4,power:400,concurrent_access:1\n\
+name:door_motor,id:5,address:0x8FFFFFE0,power:300,concurrent_access:1\n\
+name:window_motor,id:6,address:0x8FFFFFC0,power:350,concurrent_access:1\n\
 mcu,power:100\n\
 ";
 

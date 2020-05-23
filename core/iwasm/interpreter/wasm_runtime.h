@@ -116,8 +116,8 @@ typedef struct SensorActuatorInfo {
 typedef struct AccessControlModule {
   char* name;
   SensorActuatorInfo* authorized_sensor_actuator;
-  uint32* sensor_actuator_power_consumption;
   uint32 num_authorized_sensor_actuator;
+  uint32* sensor_actuator_power_consumption;
   uint32 processor_power_consumption;
   uint32 memory_consumption;
 } AccessControlModule;

@@ -610,6 +610,57 @@ init_sensor_access(void)
 }
 
 /**
+ * Parse the sensor actuator information
+ */
+SensorActuatorInfo*
+parse_sensor_actuator_info(char* name)
+{
+  SensorActuatorInfo* sensor_actuator_info = wasm_runtime_malloc(sizeof(SensorActuatorInfo));
+  char* tmp;
+  if((tmp=strstr(device_spec, name))) {
+    // Get id
+    tmp = strstr(tmp, "id:");
+    sensor_actuator_info->id = tmp[3]-'0';
+
+    // Get mmio address
+    tmp = strstr(tmp, "address:");
+    tmp += 8;
+    char address[11];
+    strncpy(address, tmp, 10);
+    sensor_actuator_info->mmio_address = (uint32)strtoul(address, NULL, 16);
+
+    // Get power
+    tmp = strstr(tmp, "power:");
+    tmp += 6;
+    char power[4];
+    for(int i = 0; i < 4; i++) {
+      if(tmp[i] == ',') {
+        break;
+      }
+      power[i] = tmp[i];
+    }
+    sensor_actuator_info->power = atoi(power);
+
+    //Get concurrent_access
+    tmp = strstr(tmp, "concurrent_access:");
+    tmp += strlen("concurrent_access:");
+    char concurrent[3];
+    for(int i = 0; i < 3; i++) {
+      if(tmp[i] == '\n') {
+        break;
+      }
+      concurrent[i] = tmp[i];
+    }
+    sensor_actuator_info->num_concurrent_access = atoi(concurrent);
+  }
+  else {
+    printf("bad name\n");
+    return NULL;
+  }
+  return sensor_actuator_info;
+}
+
+/**
  * Parse the access control spec sheet.
  */
 AccessControl*
@@ -618,9 +669,6 @@ parse_access_control_spec(void)
   AccessControl* access_control = NULL;
   if(num_sensor_actuator_concurrent_access == 0) {
     init_sensor_access();
-    // for(int i = 0; i < num_sensor_actuator_concurrent_access; i++){
-    //   printf("con access: %d\n", *(sensor_actuator_concurrent_access + i));
-    // }
   }
   return access_control;
 }
