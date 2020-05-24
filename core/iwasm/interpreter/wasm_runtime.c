@@ -613,7 +613,7 @@ init_sensor_access(void)
  * Parse the sensor actuator information
  */
 SensorActuatorInfo*
-parse_sensor_actuator_info(char* name)
+parse_sensor_actuator_info(char* name, uint32 allowed_power_consumption)
 {
   SensorActuatorInfo* sensor_actuator_info = wasm_runtime_malloc(sizeof(SensorActuatorInfo));
   char* tmp;
@@ -626,6 +626,7 @@ parse_sensor_actuator_info(char* name)
     tmp = strstr(tmp, "address:");
     tmp += 8;
     char address[11];
+    memset(address, 0, 11);
     strncpy(address, tmp, 10);
     sensor_actuator_info->mmio_address = (uint32)strtoul(address, NULL, 16);
 
@@ -633,6 +634,7 @@ parse_sensor_actuator_info(char* name)
     tmp = strstr(tmp, "power:");
     tmp += 6;
     char power[4];
+    memset(power, 0, 4);
     for(int i = 0; i < 4; i++) {
       if(tmp[i] == ',') {
         break;
@@ -645,6 +647,7 @@ parse_sensor_actuator_info(char* name)
     tmp = strstr(tmp, "concurrent_access:");
     tmp += strlen("concurrent_access:");
     char concurrent[3];
+    memset(concurrent, 0, 3);
     for(int i = 0; i < 3; i++) {
       if(tmp[i] == '\n') {
         break;
@@ -652,6 +655,9 @@ parse_sensor_actuator_info(char* name)
       concurrent[i] = tmp[i];
     }
     sensor_actuator_info->num_concurrent_access = atoi(concurrent);
+
+    // Get max power consumption.
+    sensor_actuator_info->allowed_power_consumption = allowed_power_consumption;
   }
   else {
     printf("bad name\n");
@@ -660,15 +666,71 @@ parse_sensor_actuator_info(char* name)
   return sensor_actuator_info;
 }
 
+SensorActuatorInfo**
+parse_sensor_actuator_info_list(char* list)
+{
+  SensorActuatorInfo** sensor_actuator_info_list =
+          wasm_runtime_malloc(sizeof(SensorActuatorInfo*)*10);
+  int i = 0;
+  int num = 0;
+  char name[20];
+  char number[10];
+  int j = 0;
+  memset(name, 0, 20);
+  memset(number, 0, 10);
+
+  while(*list) {
+    if(!num) {
+      if(*list != '-'){
+        name[j++] = *list;
+      }
+      else {
+        j = 0;
+        num = 1;
+        memset(number, 0, 10);
+      }
+    } else {
+      if(*list == '.') {
+        j = 0;
+        num = 0;
+        sensor_actuator_info_list[i++] = parse_sensor_actuator_info(name, (uint32)atoi(number));
+        memset(name, 0, 20);
+      }
+      else {
+        number[j++] = *list;
+      }
+    }
+    ++list;
+  }
+  sensor_actuator_info_list[i++] = parse_sensor_actuator_info(name, (uint32)atoi(number));
+  return sensor_actuator_info_list;
+}
+
 /**
  * Parse the access control spec sheet.
  */
 AccessControl*
 parse_access_control_spec(void)
 {
-  AccessControl* access_control = NULL;
+  AccessControl* access_control = wasm_runtime_malloc(sizeof(AccessControl));
   if(num_sensor_actuator_concurrent_access == 0) {
     init_sensor_access();
+  }
+
+  char* tmp = module_spec;
+  while((tmp = strstr(tmp, "name:"))){
+    tmp += 5;
+
+    // Parse name
+    char* name = wasm_runtime_malloc(20);
+    memset(name, 0, 20);
+    for(int i = 0; i < 20; i++) {
+      if(tmp[i] == ',') {
+        break;
+      }
+      name[i] = tmp[i];
+    }
+    // access_control->name = name;
   }
   return access_control;
 }

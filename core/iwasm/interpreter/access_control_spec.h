@@ -21,8 +21,8 @@ name:regular2,device:camera-10000.speaker-30000,mcu:9000,memory:500\n\
 name:regular3,device:camera-10000.microphone-5000,mcu:9000,memory:500\n\
 name:max_concurrent1,device:camera-10000,mcu:9000,memory:500\n\
 name:max_concurrent2,device:microphone-10000,mcu:9000,memory:500\n\
-name:max_concurrent3,device:microphone-10000.door_motor:10000,mcu:9000,memory:500\n\
-name:max_concurrent4,device:microphone-10000.window_motor:10000,mcu:9000,memory:500\n\
+name:max_concurrent3,device:microphone-10000.door_motor-10000,mcu:9000,memory:500\n\
+name:max_concurrent4,device:microphone-10000.window_motor-10000,mcu:9000,memory:500\n\
 name:low_pow,device:imu-500.camera-1000.door_motor-900,mcu:5000,memory:300\n\
 name:low_mcu,device:imu-10000,mcu:200,memory:500\n\
 name:low_memory,device:imu-10000,mcu:10000,memory:10\n\
