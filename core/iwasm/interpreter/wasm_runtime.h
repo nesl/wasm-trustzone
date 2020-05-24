@@ -111,6 +111,7 @@ typedef struct SensorActuatorInfo {
   uint32 num_concurrent_access;
   uint32 power;
   uint32 allowed_power_consumption;
+  uint32 used_power;
 } SensorActuatorInfo;
 
 // The access control information for each module
@@ -119,11 +120,13 @@ typedef struct AccessControlModule {
   SensorActuatorInfo** authorized_sensor_actuator;
   uint32 num_authorized_sensor_actuator;
   uint32 processor_power_consumption;
+  uint32 used_processor_power;
   uint32 memory_consumption;
+  uint32 used_memory;
 } AccessControlModule;
 
 typedef struct AccessControl {
-  AccessControlModule* module_info;
+  AccessControlModule** module_info;
   uint32 num_module_info;
   uint32 processor_power;
 } AccessControl;

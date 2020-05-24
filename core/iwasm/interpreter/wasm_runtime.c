@@ -658,6 +658,7 @@ parse_sensor_actuator_info(char* name, uint32 allowed_power_consumption)
 
     // Get max power consumption.
     sensor_actuator_info->allowed_power_consumption = allowed_power_consumption;
+    sensor_actuator_info->used_power = 0;
   }
   else {
     printf("bad name\n");
@@ -706,6 +707,81 @@ parse_sensor_actuator_info_list(char* list)
   return sensor_actuator_info_list;
 }
 
+/*
+ * Parse the access control module information.
+ */
+AccessControlModule**
+parse_access_control_module(void)
+{
+  AccessControlModule** access_control_module_list = wasm_runtime_malloc(sizeof(AccessControlModule*) * 8);
+  char* tmp = module_spec;
+  int j = 0;
+  while((tmp = strstr(tmp, "name:"))){
+    tmp += 5;
+    AccessControlModule* access_control_module = wasm_runtime_malloc(sizeof(AccessControlModule));
+    // Parse name
+    char* name = wasm_runtime_malloc(20);
+    memset(name, 0, 20);
+    for(int i = 0; i < 20; i++) {
+      if(tmp[i] == ',') {
+        break;
+      }
+      name[i] = tmp[i];
+    }
+    access_control_module->name = name;
+
+    // Parse device
+    char* device_list = wasm_runtime_malloc(100);
+    memset(device_list, 0, 100);
+    tmp = strstr(tmp, "device:");
+    tmp += strlen("device:");
+    for(int i = 0; i < 100; i++) {
+      if(tmp[i] == ',') {
+        break;
+      }
+      device_list[i] = tmp[i];
+    }
+
+    int num_authorized_sensor_actuator = 1;
+    for(int i = 0; i < 100; i++) {
+      if(!device_list[i]) break;
+      if(device_list[i] == '.') ++num_authorized_sensor_actuator;
+    }
+
+    SensorActuatorInfo** authorized_sensor_actuator = parse_sensor_actuator_info_list(device_list);
+    access_control_module->authorized_sensor_actuator = authorized_sensor_actuator;
+    access_control_module->num_authorized_sensor_actuator = num_authorized_sensor_actuator;
+
+    //Parse processor power
+    tmp = strstr(tmp, "mcu:");
+    tmp += strlen("mcu:");
+    char mcu_power[8];
+    memset(mcu_power, 0, 8);
+    for(int i = 0; i < 8; i++) {
+      if(tmp[i] == ',') {
+        break;
+      }
+      mcu_power[i] = tmp[i];
+    }
+    access_control_module->processor_power_consumption = atoi(mcu_power);
+    access_control_module->used_processor_power = 0;
+
+    //Parse memory consumption
+    tmp = strstr(tmp, "memory:");
+    tmp += strlen("memory:");
+    char memory_consumption[16];
+    memset(memory_consumption, 0, 16);
+    for(int i = 0; i < 16; i++) {
+      if(tmp[i] == '\n') break;
+      memory_consumption[i] = tmp[i];
+    }
+    access_control_module->memory_consumption = atoi(memory_consumption);
+    access_control_module->used_memory = 0;
+    access_control_module_list[j++] = access_control_module;
+  }
+  return access_control_module_list;
+}
+
 /**
  * Parse the access control spec sheet.
  */
@@ -716,23 +792,55 @@ parse_access_control_spec(void)
   if(num_sensor_actuator_concurrent_access == 0) {
     init_sensor_access();
   }
+  access_control->module_info = parse_access_control_module();
 
-  char* tmp = module_spec;
-  while((tmp = strstr(tmp, "name:"))){
-    tmp += 5;
-
-    // Parse name
-    char* name = wasm_runtime_malloc(20);
-    memset(name, 0, 20);
-    for(int i = 0; i < 20; i++) {
-      if(tmp[i] == ',') {
-        break;
-      }
-      name[i] = tmp[i];
+  // Get number of module info
+  int num_module_info = 0;
+  for(int i = 0; i < strlen(module_spec) + 1; i++) {
+    if(module_spec[i] == '\n') {
+      ++num_module_info;
     }
-    // access_control->name = name;
   }
+  access_control->num_module_info = num_module_info;
+
+  // Parse process mcu power info
+  char* tmp = device_spec;
+  tmp = strstr(tmp, "mcu,power:");
+  tmp += strlen("mcu,power:");
+  char mcu_power[8];
+  memset(mcu_power, 0, 8);
+  for(int i = 0; i < 8; i++) {
+    if(tmp[i] == '\n') break;
+    mcu_power[i] = tmp[i];
+  }
+
+  access_control->processor_power = atoi(mcu_power);
   return access_control;
+}
+
+// Debugging purpose.
+void print_access_control(AccessControl* access_control) {
+  printf("Processor power: %u\n", access_control->processor_power);
+  AccessControlModule** module_info = access_control->module_info;
+  printf("num module info: %u\n",access_control->num_module_info);
+  for(int i = 0; i < access_control->num_module_info; i++){
+    printf("name: %s\n", module_info[i]->name);
+    printf("processor consumption: %u\n", module_info[i]->processor_power_consumption);
+    printf("used processor consumption: %u\n", module_info[i]->used_processor_power);
+    printf("memory consumption: %u\n", module_info[i]->memory_consumption);
+    printf("used memory: %u\n", module_info[i]->used_memory);
+    printf("Authorized sensor Info\n");
+    for(int j = 0; j < module_info[i]->num_authorized_sensor_actuator; j++){
+      SensorActuatorInfo* authorized = (module_info[i]->authorized_sensor_actuator)[j];
+      printf("\tid: %u\n", authorized->id);
+      printf("\tmmio: %x\n", authorized->mmio_address);
+      printf("\tnum_concurrent_access: %u\n", authorized->num_concurrent_access);
+      printf("\tpower: %u\n", authorized->power);
+      printf("\tallowed_power_consumption: %u\n", authorized->allowed_power_consumption);
+      printf("\tused_power: %u\n", authorized->used_power);
+    }
+    printf("\n\n");
+  }
 }
 
 /**
@@ -773,7 +881,7 @@ wasm_instantiate(WASMModule *module,
                                         &global_data_size,
                                         error_buf, error_buf_size)))
         return NULL;
-    //(RENJU TODO: Parse the spec sheet for the access control.)
+    //(RENJU: Parse the spec sheet for the access control.)
     if(!(access_control = parse_access_control_spec())){
       set_error_buf(error_buf, error_buf_size, "Access control parsing fail.");
       globals_deinstantiate(globals);
@@ -789,6 +897,7 @@ wasm_instantiate(WASMModule *module,
     }
 
     memset(module_inst, 0, (uint32)sizeof(WASMModuleInstance));
+    module_inst->access_control = access_control;
     module_inst->global_count = global_count;
     module_inst->globals = globals;
 
