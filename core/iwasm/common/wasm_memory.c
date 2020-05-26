@@ -6,6 +6,7 @@
 #include "wasm_runtime_common.h"
 #include "bh_platform.h"
 #include "mem_alloc.h"
+#include "../interpreter/access_control_spec.h"
 
 #if BH_ENABLE_MEMORY_PROFILING != 0
 
@@ -66,6 +67,68 @@ wasm_memory_init_with_pool(void *mem, unsigned int bytes)
     }
     LOG_ERROR("Init memory with pool (%p, %u) failed.\n", mem, bytes);
     return false;
+}
+
+bool aerogel_check_peripheral_address(
+  char* lower_check_address,
+  char* upper_check_address,
+  uint32* addresses,
+  int total_address
+) {
+  for(int i = 0; i < total_address ; i++) {
+    if((uint32)&(*lower_check_address) < addresses[i]
+       && (uint32)&(*upper_check_address) > addresses[i]
+     ) return false;
+  }
+  return true;
+}
+
+void *
+aerogel_wasm_safe_allocation(void *start_address, unsigned int size) {
+  // First get the poisonous addresses
+  int total_address = 0;
+  char* tmp = device_spec;
+  for(int j = 0 ; j < strlen(device_spec) ; j++) {
+    if(device_spec[j] == '\n') ++total_address;
+  }
+  total_address -= 1;
+
+  uint32 addresses[total_address];
+  tmp = device_spec;
+  int i = 0;
+
+  while((tmp = strstr(tmp, "address:"))){
+    tmp += 8;
+    char address[11];
+    memset(address, 0, 11);
+    strncpy(address, tmp, 10);
+    addresses[i++] = (uint32)strtoul(address, NULL, 16);
+  }
+
+  // Now relook at the base allocator
+  if (memory_mode != MEMORY_MODE_POOL) {
+    LOG_WARNING("aerogel_wasm_safe_allocation failed: not memory mode pool.\n");
+    return NULL;
+  }
+
+  // Find a safe place in the linear mapping. Try to find the next 8K memory.
+  // If cannot find, then let's fail it. Then request to reallocate.
+  // If it fails, then fuck done.
+
+  char* ptr_start_address = start_address;
+  for(i = 1; i < 2048 ; i++) {
+    char* ptr_end_address = ptr_start_address + size;
+    ptr_start_address += i * 4;
+    char* safe_memory = NULL;
+    if(aerogel_check_peripheral_address(ptr_start_address,
+      ptr_end_address,
+      addresses,
+      total_address) && (safe_memory = wasm_runtime_realloc(ptr_start_address, size))
+    ) {
+      return safe_memory;
+    }
+  }
+  return NULL;
 }
 
 static bool
@@ -369,4 +432,3 @@ wasm_runtime_free_profile(const char *file, int line,
 }
 #endif /* end of BH_ENABLE_MEMORY_PROFILING */
 #endif /* end of MALLOC_MEMORY_FROM_SYSTEM*/
-

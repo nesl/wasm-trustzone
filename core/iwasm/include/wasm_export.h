@@ -10,7 +10,6 @@
 #include <stdbool.h>
 #include "lib_export.h"
 
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -41,7 +40,6 @@ extern "C" {
 #define native_raw_get_arg(type, name, args) type name = *((type*)(args++))
 
 #define native_raw_set_return(val) *raw_ret = (val)
-
 
 /* Uninstantiated WASM module loaded from WASM binary file
    or AoT binary file*/
@@ -150,6 +148,12 @@ wasm_runtime_destroy();
  */
 void *
 wasm_runtime_malloc(unsigned int size);
+
+/**
+  * Safely allocate the memory for the given size.
+  */
+void *
+aerogel_wasm_safe_allocation(void *start_address, unsigned int size);
 
 /**
  * Reallocate memory from runtime memory environment

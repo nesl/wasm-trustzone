@@ -1,10 +1,7 @@
-#ifndef _AEROGEL_
-#define _AEROGEL_
+// Due to some fucking reasons. I have to create a duplicate one for testing
+// purposes.
 
-// The definition of the below variables are for testing purposes in wasm_runtime.c
-// in the same folder.
-extern char* device_spec;
-/*
+char* device_spec =
 "\
 name:imu,id:0,address:0x90000000,power:10,concurrent_access:50\n\
 name:camera,id:1,address:0x8ffffffc,power:500,concurrent_access:2\n\
@@ -15,10 +12,8 @@ name:door_motor,id:5,address:0x8FFFFFE0,power:300,concurrent_access:1\n\
 name:window_motor,id:6,address:0x8FFFFFC0,power:350,concurrent_access:1\n\
 mcu,power:100\n\
 ";
-*/
 
-extern char* module_spec;
-/*
+char* module_spec =
 "\
 name:regular1,device:imu-10000.motion-9000.speaker-20000.window_motor-5000,mcu:9000,memory:200\n\
 name:regular2,device:camera-10000.speaker-30000,mcu:9000,memory:500\n\
@@ -31,6 +26,3 @@ name:low_pow,device:imu-500.camera-1000.door_motor-900,mcu:5000,memory:300\n\
 name:low_mcu,device:imu-10000,mcu:200,memory:500\n\
 name:low_memory,device:imu-10000,mcu:10000,memory:10\n\
 ";
-*/
-
-#endif
