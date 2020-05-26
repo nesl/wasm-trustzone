@@ -59,6 +59,39 @@ memories_deinstantiate(WASMMemoryInstance **memories, uint32 count)
   }
 }
 
+
+static bool
+check_illegal_memory_boundary(WASMMemoryInstance* memory)
+{
+  int total_address = 0;
+  char* tmp = device_spec;
+  for(int j = 0 ; j < strlen(device_spec) ; j++) {
+    if(device_spec[j] == '\n') ++total_address;
+  }
+  total_address -= 1;
+
+  uint32 addresses[total_address];
+  tmp = device_spec;
+  int i = 0;
+
+  while((tmp = strstr(tmp, "address:"))){
+    tmp += 8;
+    char address[11];
+    memset(address, 0, 11);
+    strncpy(address, tmp, 10);
+    addresses[i++] = (uint32)strtoul(address, NULL, 16);
+  }
+
+  for(i = 0 ; i < total_address; i++){
+    if((uint32)(&(*(memory->base_addr))) < addresses[i]
+                && (uint32)(&(*(memory->end_addr))) > addresses[i])
+    {
+      return false;
+    }
+  }
+  return true;
+}
+
 static WASMMemoryInstance*
 memory_instantiate(uint32 num_bytes_per_page,
                    uint32 init_page_count, uint32 max_page_count,
@@ -106,6 +139,12 @@ memory_instantiate(uint32 num_bytes_per_page,
 #else
     memory->heap_base_offset = 0;
 #endif
+
+    if(!check_illegal_memory_boundary(memory)) {
+      printf("memory address illegally accessed the sensors and actuators.");
+      wasm_runtime_free(memory);
+      return NULL;
+    }
     return memory;
 }
 
@@ -144,7 +183,7 @@ memories_instantiate(const WASMModule *module,
         if (!(memory = memories[mem_index++] =
                     memory_instantiate(import->u.memory.num_bytes_per_page,
                                        import->u.memory.init_page_count,
-                                       import->u.memory. max_page_count,
+                                       import->u.memory.max_page_count,
                                        global_data_size,
                                        heap_size, error_buf, error_buf_size))) {
             set_error_buf(error_buf, error_buf_size,
