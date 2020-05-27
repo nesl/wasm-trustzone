@@ -311,6 +311,9 @@ wasm_call_indirect(WASMExecEnv *exec_env,
                    uint32_t element_indices,
                    uint32_t argc, uint32_t argv[]);
 
+void
+test_wasm_runtime_native_print(void);
+
 #ifdef __cplusplus
 }
 #endif

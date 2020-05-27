@@ -624,6 +624,12 @@ wasm_runtime_set_user_data(wasm_exec_env_t exec_env,
 void *
 wasm_runtime_get_user_data(wasm_exec_env_t exec_env);
 
+/**
+ * Purely for testing purpose.
+ */
+void
+test_call_wasm_runtime_native(void);
+
 #ifdef __cplusplus
 }
 #endif

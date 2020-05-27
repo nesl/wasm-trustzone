@@ -1503,6 +1503,15 @@ wasm_enlarge_memory(WASMModuleInstance *module, uint32 inc_page_count)
     return true;
 }
 
+void
+test_wasm_runtime_native_print(void) {
+  printf("\n\n\n\n");
+  printf("==========start=========\n");
+  printf("I have nothing to say\n");
+  printf("print here!\n");
+  printf("===========end==========\n");
+  printf("\n\n\n\n");
+}
 
 bool
 wasm_call_indirect(WASMExecEnv *exec_env,

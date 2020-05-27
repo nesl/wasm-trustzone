@@ -1074,6 +1074,10 @@ check_main_func_type(const WASMType *type)
     return true;
 }
 
+void test_call_wasm_runtime_native(void) {
+  test_wasm_runtime_native_print();
+}
+
 bool
 wasm_application_execute_main(WASMModuleInstanceCommon *module_inst,
                               int argc, char *argv[])

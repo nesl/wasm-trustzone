@@ -1,4 +1,4 @@
-f = open("renju-hello.wasm","rb")
+f = open("renju-cross-check.wasm","rb")
 num_list = list(f.read())
 results = []
 

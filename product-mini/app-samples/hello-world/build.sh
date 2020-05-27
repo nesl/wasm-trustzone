@@ -8,7 +8,8 @@ WAMR_DIR=${PWD}/../../..
         -z stack-size=4096 -Wl,--initial-memory=65536 \
         --sysroot=${WAMR_DIR}/wamr-sdk/app/libc-builtin-sysroot    \
         -Wl,--allow-undefined-file=${WAMR_DIR}/wamr-sdk/app/libc-builtin-sysroot/share/defined-symbols.txt \
-        -Wl,--export=main, \
+        -Wl,--export=main,\
+        -Wl,--allow-undefined,\
         -Wl,--no-threads,--strip-all,--no-entry \
-        -nostdlib -o renju-hello.wasm renju-hello.c
+        -nostdlib -o renju-cross-check.wasm renju-cross-check.c
 #./jeffdump -o test_wasm.h -n wasm_test_file test.wasm

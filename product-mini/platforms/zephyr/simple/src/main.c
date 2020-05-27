@@ -215,4 +215,3 @@ void main(void)
 {
     iwasm_init();
 }
-
