@@ -770,7 +770,10 @@ wasm_interp_call_func_native(WASMModuleInstance *module_inst,
 #if WASM_ENABLE_LABELS_AS_VALUES != 0
 
 #define HANDLE_OP(opcode) HANDLE_##opcode
-#define FETCH_OPCODE_AND_DISPATCH() goto *handle_table[*frame_ip++]
+#define FETCH_OPCODE_AND_DISPATCH() do {  \
+  module->executed_instructions++;        \
+  goto *handle_table[*frame_ip++];        \
+} while (0)
 #define HANDLE_OP_END() FETCH_OPCODE_AND_DISPATCH()
 
 #else   /* else of WASM_ENABLE_LABELS_AS_VALUES */
@@ -2376,9 +2379,13 @@ wasm_interp_call_wasm(WASMModuleInstance *module_inst,
     wasm_exec_env_set_cur_frame(exec_env, frame);
 
     if (function->is_import_func)
+    {
         wasm_interp_call_func_native(module_inst, exec_env, function, frame);
+    }
     else
+    {
         wasm_interp_call_func_bytecode(module_inst, exec_env, function, frame);
+    }
 
     /* Output the return value to the caller */
     if (!wasm_get_exception(module_inst)) {
@@ -2387,5 +2394,6 @@ wasm_interp_call_wasm(WASMModuleInstance *module_inst,
     }
 
     wasm_exec_env_set_cur_frame(exec_env, prev_frame);
+
     FREE_FRAME(exec_env, frame);
 }

@@ -180,6 +180,10 @@ typedef struct WASMModuleInstance {
     WASMExecEnv *main_exec_env;
 
     AccessControl *access_control;
+
+    // The below two are the metadata only. For debugging purposes.
+    uint32 executed_instructions;
+    uint32 native_execution_time_ms;
 } WASMModuleInstance;
 
 struct WASMInterpFrame;

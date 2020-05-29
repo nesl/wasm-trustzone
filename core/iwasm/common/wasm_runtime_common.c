@@ -1644,7 +1644,6 @@ wasm_runtime_invoke_native(WASMExecEnv *exec_env, void *func_ptr,
     bool ret = false;
 
     n_ints++; /* exec env */
-
     /* Traverse firstly to calculate stack args count */
     for (i = 0; i < func_type->param_count; i++) {
         switch (func_type->types[i]) {
@@ -1943,7 +1942,10 @@ wasm_runtime_invoke_native(WASMExecEnv *exec_env, void *func_ptr,
 
     argc1 = j;
     exec_env->attachment = attachment;
+    printf("Definitely come here.\n");
+    uint32 start = (uint32)bh_get_tick_ms();
     if (func_type->result_count == 0) {
+        printf("Void return.\n");
         invokeNative_Void(func_ptr, argv1, argc1);
     }
     else {
@@ -1965,6 +1967,9 @@ wasm_runtime_invoke_native(WASMExecEnv *exec_env, void *func_ptr,
                 break;
         }
     }
+    uint32 end = (uint32)bh_get_tick_ms();
+    WASMModuleInstance* tmp = (WASMModuleInstance*) module;
+    tmp->native_execution_time_ms += (end - start);
     exec_env->attachment = NULL;
 
     ret = true;
