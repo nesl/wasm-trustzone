@@ -1942,10 +1942,10 @@ wasm_runtime_invoke_native(WASMExecEnv *exec_env, void *func_ptr,
 
     argc1 = j;
     exec_env->attachment = attachment;
-    printf("Definitely come here.\n");
+    // printf("Definitely come here.\n");
     uint32 start = (uint32)bh_get_tick_ms();
     if (func_type->result_count == 0) {
-        printf("Void return.\n");
+        // printf("Void return.\n");
         invokeNative_Void(func_ptr, argv1, argc1);
     }
     else {

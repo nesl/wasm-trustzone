@@ -40,6 +40,9 @@ typedef struct WASMMemoryInstance {
     /* End address of memory */
     uint8 *end_addr;
 
+    // RL: Total memory size used.
+    uint32 total_size;
+
     /* Base address, the layout is:
        heap_data + memory data + global data
        memory data init size is: num_bytes_per_page * cur_page_count
@@ -57,6 +60,9 @@ typedef struct WASMTableInstance {
     uint32 cur_size;
     /* Maximum size */
     uint32 max_size;
+
+    // RL: total size
+    uint32 total_size;
     /* Base address */
     uint8 base_addr[1];
 } WASMTableInstance;
@@ -120,14 +126,13 @@ typedef struct AccessControlModule {
   SensorActuatorInfo** authorized_sensor_actuator;
   uint32 num_authorized_sensor_actuator;
   uint32 processor_power_consumption;
-  uint32 used_processor_power;
   uint32 memory_consumption;
-  uint32 used_memory;
 } AccessControlModule;
 
 typedef struct AccessControl {
   AccessControlModule** module_info;
   uint32 num_module_info;
+  uint32 module_index; //I didn't think carefully. The index is the index of the current module.
   uint32 processor_power;
 } AccessControl;
 
@@ -184,6 +189,7 @@ typedef struct WASMModuleInstance {
     // The below two are the metadata only. For debugging purposes.
     uint32 executed_instructions;
     uint32 native_execution_time_ms;
+    uint32 memory_usage_bytes;
 } WASMModuleInstance;
 
 struct WASMInterpFrame;
@@ -317,6 +323,10 @@ wasm_call_indirect(WASMExecEnv *exec_env,
 
 void
 test_wasm_runtime_native_print(void);
+
+// RL: Check whether the memory has violated the used-defined access control rules
+bool
+check_memory_usage(WASMModuleInstance* module_inst);
 
 #ifdef __cplusplus
 }

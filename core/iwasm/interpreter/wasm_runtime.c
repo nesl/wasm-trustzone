@@ -27,15 +27,15 @@ mcu,power:100\n\
 
 char* module_spec =
 "\
-name:regular1,device:imu-10000.motion-9000.speaker-20000.window_motor-5000,mcu:9000,memory:200\n\
-name:regular2,device:camera-10000.speaker-30000,mcu:9000,memory:500\n\
-name:regular3,device:camera-10000.microphone-5000,mcu:9000,memory:500\n\
-name:max_concurrent1,device:camera-10000,mcu:9000,memory:500\n\
-name:max_concurrent2,device:microphone-10000,mcu:9000,memory:500\n\
-name:max_concurrent3,device:microphone-10000.door_motor-10000,mcu:9000,memory:500\n\
-name:max_concurrent4,device:microphone-10000.window_motor-10000,mcu:9000,memory:500\n\
-name:low_pow,device:imu-500.camera-1000.door_motor-900,mcu:5000,memory:300\n\
-name:low_mcu,device:imu-10000,mcu:200,memory:500\n\
+name:regular1,device:imu-10000.motion-9000.speaker-20000.window_motor-5000,mcu:9000,memory:200000\n\
+name:regular2,device:camera-10000.speaker-30000,mcu:9000,memory:200000\n\
+name:regular3,device:camera-10000.microphone-5000,mcu:9000,memory:200000\n\
+name:max_concurrent1,device:camera-10000,mcu:9000,memory:200000\n\
+name:max_concurrent2,device:microphone-10000,mcu:9000,memory:200000\n\
+name:max_concurrent3,device:microphone-10000.door_motor-10000,mcu:9000,memory:500000\n\
+name:max_concurrent4,device:microphone-10000.window_motor-10000,mcu:9000,memory:500000\n\
+name:low_pow,device:imu-500.camera-1000.door_motor-900,mcu:5000,memory:300000\n\
+name:low_mcu,device:imu-10000,mcu:200,memory:500000\n\
 name:low_memory,device:imu-10000,mcu:10000,memory:10\n\
 ";
 
@@ -140,6 +140,8 @@ memory_instantiate(uint32 num_bytes_per_page,
     }
 
     memset(memory, 0, (uint32)total_size);
+
+    memory->total_size = (uint32)total_size;
 
     // Check error buffer. Then reallocate the memory.
     if(!check_illegal_memory_boundary(memory) &&
@@ -314,6 +316,7 @@ tables_instantiate(const WASMModule *module,
 
         /* Set all elements to -1 to mark them as uninitialized elements */
         memset(table, -1, (uint32)total_size);
+        table->total_size = (uint32)total_size;
         table->elem_type = import->u.table.elem_type;
         table->cur_size = import->u.table.init_size;
         table->max_size = import->u.table.max_size;
@@ -335,6 +338,7 @@ tables_instantiate(const WASMModule *module,
 
         /* Set all elements to -1 to mark them as uninitialized elements */
         memset(table, -1, (uint32)total_size);
+        table->total_size = (uint32)total_size;
         table->elem_type = module->tables[i].elem_type;
         table->cur_size = module->tables[i].init_size;
         table->max_size = module->tables[i].max_size;
@@ -835,7 +839,6 @@ parse_access_control_module(void)
       mcu_power[i] = tmp[i];
     }
     access_control_module->processor_power_consumption = atoi(mcu_power);
-    access_control_module->used_processor_power = 0;
 
     //Parse memory consumption
     tmp = strstr(tmp, "memory:");
@@ -847,7 +850,6 @@ parse_access_control_module(void)
       memory_consumption[i] = tmp[i];
     }
     access_control_module->memory_consumption = atoi(memory_consumption);
-    access_control_module->used_memory = 0;
     access_control_module_list[j++] = access_control_module;
   }
   return access_control_module_list;
@@ -860,6 +862,8 @@ AccessControl*
 parse_access_control_spec(void)
 {
   AccessControl* access_control = wasm_runtime_malloc(sizeof(AccessControl));
+  memset(access_control, 0, sizeof(AccessControl));
+
   if(num_sensor_actuator_concurrent_access == 0) {
     init_sensor_access();
   }
@@ -897,9 +901,9 @@ void print_access_control(AccessControl* access_control) {
   for(int i = 0; i < access_control->num_module_info; i++){
     printf("name: %s\n", module_info[i]->name);
     printf("processor consumption: %u\n", module_info[i]->processor_power_consumption);
-    printf("used processor consumption: %u\n", module_info[i]->used_processor_power);
+    // printf("used processor consumption: %u\n", module_info[i]->used_processor_power);
     printf("memory consumption: %u\n", module_info[i]->memory_consumption);
-    printf("used memory: %u\n", module_info[i]->used_memory);
+    // printf("used memory: %u\n", module_info[i]->used_memory);
     printf("Authorized sensor Info\n");
     for(int j = 0; j < module_info[i]->num_authorized_sensor_actuator; j++){
       SensorActuatorInfo* authorized = (module_info[i]->authorized_sensor_actuator)[j];
@@ -912,6 +916,30 @@ void print_access_control(AccessControl* access_control) {
     }
     printf("\n\n");
   }
+}
+
+// RL: Check whether the memory has violated the used-defined access control rules
+bool
+check_memory_usage(WASMModuleInstance* module_inst)
+{
+  uint32 total_memory = 0;
+  WASMMemoryInstance** memory_inst = module_inst -> memories;
+  WASMTableInstance** table_inst = module_inst -> tables;
+
+  for(int i = 0; i < module_inst->memory_count; i++)
+  {
+    total_memory += memory_inst[i]->total_size;
+  }
+
+  for(int i = 0; i < module_inst->table_count; i++)
+  {
+    total_memory += table_inst[i]->total_size;
+  }
+
+  uint32 module_index = module_inst->access_control->module_index;
+  module_inst->memory_usage_bytes = total_memory;
+  uint32 specified_memory = module_inst->access_control->module_info[module_index]->memory_consumption;
+  return module_inst->memory_usage_bytes <= specified_memory;
 }
 
 /**
@@ -999,6 +1027,14 @@ wasm_instantiate(WASMModule *module,
                     error_buf, error_buf_size)))) {
         wasm_deinstantiate(module_inst);
         return NULL;
+    }
+
+    // Make sure the memory has not violated the rule.
+    if (!check_memory_usage(module_inst)) {
+      set_error_buf(error_buf, error_buf_size,
+                    "Memory usage exceeds.");
+      wasm_deinstantiate(module_inst);
+      return NULL;
     }
 
     if (module_inst->memory_count || global_count > 0) {
@@ -1429,10 +1465,18 @@ wasm_enlarge_memory(WASMModuleInstance *module, uint32 inc_page_count)
                         + memory->global_data_size;
     uint8 *global_data_old;
     void *heap_handle_old = memory->heap_handle;
+    uint32 module_index = module->access_control->module_index;
 
-    if (inc_page_count <= 0)
+    if (inc_page_count <= 0){
         /* No need to enlarge memory */
         return true;
+    }
+
+    //RL: Make sure the enlarged memory does not expand beyond the request.
+    if((uint32)total_size > module->access_control->module_info[module_index]->memory_consumption){
+      wasm_set_exception(module, "fail to enlarge memory because of access memory size.");
+      return false;
+    }
 
     if (total_page_count < memory->cur_page_count /* integer overflow */
         || total_page_count > memory->max_page_count) {
@@ -1476,6 +1520,8 @@ wasm_enlarge_memory(WASMModuleInstance *module, uint32 inc_page_count)
     memset((uint8*)new_memory + total_size_old,
            0, (uint32)total_size - total_size_old);
 
+    new_memory->total_size = (uint32)total_size;
+
     new_memory->heap_handle = (uint8*)heap_handle_old +
                               ((uint8*)new_memory - (uint8*)memory);
     if (mem_allocator_migrate(new_memory->heap_handle,
@@ -1500,6 +1546,7 @@ wasm_enlarge_memory(WASMModuleInstance *module, uint32 inc_page_count)
     memset(global_data_old, 0, new_memory->global_data_size);
 
     module->memories[0] = module->default_memory = new_memory;
+    module->access_control->module_info[module_index]->memory_consumption = (uint32)total_size;
     return true;
 }
 
