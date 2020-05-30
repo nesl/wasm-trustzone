@@ -770,9 +770,18 @@ wasm_interp_call_func_native(WASMModuleInstance *module_inst,
 #if WASM_ENABLE_LABELS_AS_VALUES != 0
 
 #define HANDLE_OP(opcode) HANDLE_##opcode
-#define FETCH_OPCODE_AND_DISPATCH() do {  \
-  module->executed_instructions++;        \
-  goto *handle_table[*frame_ip++];        \
+#define FETCH_OPCODE_AND_DISPATCH() do {          \
+  module->wasm_instructions_energy++;             \
+  uint32 current_time = (uint32)bh_get_tick_ms(); \
+  if(current_time - prev_timestamp > 1000) {      \
+    module->wasm_instructions_energy = 0;         \
+    module->native_execution_time_ms = 0;         \
+  }                                               \
+  else if(check_cpu_consumption(module)) {        \
+    wasm_set_exception(module, "max mcu power."); \
+    goto got_exception;                           \
+  }                                               \
+  goto *handle_table[*frame_ip++];                \
 } while (0)
 #define HANDLE_OP_END() FETCH_OPCODE_AND_DISPATCH()
 
@@ -782,6 +791,13 @@ wasm_interp_call_func_native(WASMModuleInstance *module_inst,
 #define HANDLE_OP_END() continue
 
 #endif  /* end of WASM_ENABLE_LABELS_AS_VALUES */
+
+static bool
+check_cpu_consumption(WASMModuleInstance *module) {
+  uint32 module_index = module->access_control->module_index;
+  uint32 max_energy = module->access_control->module_info[module_index]->processor_power_consumption;
+  return (module->native_execution_time_ms + module->wasm_instructions_energy) > max_energy;
+}
 
 static void
 wasm_interp_call_func_bytecode(WASMModuleInstance *module,
@@ -817,6 +833,7 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
   uint32 local_idx, local_offset, global_idx;
   uint8 local_type, *global_addr;
   uint32 cache_index;
+  uint32 prev_timestamp = module->timestamp;
 
 #if WASM_ENABLE_LABELS_AS_VALUES != 0
   #define HANDLE_OPCODE(op) &&HANDLE_##op
@@ -2317,10 +2334,10 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
       FREE_FRAME(exec_env, frame);
       wasm_exec_env_set_cur_frame(exec_env, (WASMRuntimeFrame*)prev_frame);
 
-      if (!prev_frame->ip)
+      if (!prev_frame->ip) {
         /* Called from native. */
         return;
-
+      }
       RECOVER_CONTEXT(prev_frame);
       HANDLE_OP_END ();
     }

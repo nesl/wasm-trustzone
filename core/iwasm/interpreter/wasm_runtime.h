@@ -132,7 +132,7 @@ typedef struct AccessControlModule {
 typedef struct AccessControl {
   AccessControlModule** module_info;
   uint32 num_module_info;
-  uint32 module_index; //I didn't think carefully. The index is the index of the current module.
+  uint32 module_index; //I didn't code carefully previously. The index is the index of the current module.
   uint32 processor_power;
 } AccessControl;
 
@@ -186,8 +186,10 @@ typedef struct WASMModuleInstance {
 
     AccessControl *access_control;
 
+    uint32 timestamp;
+
     // The below two are the metadata only. For debugging purposes.
-    uint32 executed_instructions;
+    uint32 wasm_instructions_energy;
     uint32 native_execution_time_ms;
     uint32 memory_usage_bytes;
 } WASMModuleInstance;
