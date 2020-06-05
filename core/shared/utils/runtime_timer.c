@@ -37,6 +37,11 @@ uint64 bh_get_tick_ms()
     return os_time_get_boot_microsecond() / 1000;
 }
 
+uint32 bh_get_tick_us()
+{
+    return os_time_get_renju_boot_microsecond();
+}
+
 uint32 bh_get_elpased_ms(uint32 * last_system_clock)
 {
     uint32 elpased_ms;
@@ -428,4 +433,3 @@ void cleanup_app_timers(timer_ctx_t ctx)
 
     os_mutex_unlock(&ctx->mutex);
 }
-

@@ -59,6 +59,9 @@ int os_vprintf(const char *format, va_list ap);
  */
 uint64 os_time_get_boot_microsecond(void);
 
+// This will get you the real boot microseconds time.
+uint32 os_time_get_renju_boot_microsecond(void);
+
 /**
  * Get current thread id.
  * Implementation optional: Used by runtime for logging only.

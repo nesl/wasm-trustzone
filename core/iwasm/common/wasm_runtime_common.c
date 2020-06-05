@@ -1943,7 +1943,7 @@ wasm_runtime_invoke_native(WASMExecEnv *exec_env, void *func_ptr,
     argc1 = j;
     exec_env->attachment = attachment;
     // printf("Definitely come here.\n");
-    uint32 start = (uint32)bh_get_tick_ms();
+    uint32 start = (uint32)bh_get_tick_us();
     if (func_type->result_count == 0) {
         // printf("Void return.\n");
         invokeNative_Void(func_ptr, argv1, argc1);
@@ -1967,9 +1967,9 @@ wasm_runtime_invoke_native(WASMExecEnv *exec_env, void *func_ptr,
                 break;
         }
     }
-    uint32 end = (uint32)bh_get_tick_ms();
+    uint32 end = (uint32)bh_get_tick_us();
     WASMModuleInstance* tmp = (WASMModuleInstance*) module;
-    tmp->native_execution_time_ms += (end - start);
+    tmp->native_execution_time_us += (end - start);
     exec_env->attachment = NULL;
 
     ret = true;

@@ -22,12 +22,12 @@ name:microphone,id:3,address:0x8FFFFFEC,power:100,concurrent_access:3\n\
 name:speaker,id:4,address:0x8FFFFFE4,power:400,concurrent_access:1\n\
 name:door_motor,id:5,address:0x8FFFFFE0,power:300,concurrent_access:1\n\
 name:window_motor,id:6,address:0x8FFFFFC0,power:350,concurrent_access:1\n\
-mcu,power:100\n\
+mcu,power:1\n\
 ";
 
 char* module_spec =
 "\
-name:regular1,device:imu-10000.motion-9000.speaker-20000.window_motor-5000,mcu:9000,memory:200000\n\
+name:regular1,device:imu-10000.motion-9000.speaker-20000.window_motor-5000,mcu:5000,memory:200000\n\
 name:regular2,device:camera-10000.speaker-30000,mcu:9000,memory:200000\n\
 name:regular3,device:camera-10000.microphone-5000,mcu:9000,memory:200000\n\
 name:max_concurrent1,device:camera-10000,mcu:9000,memory:200000\n\

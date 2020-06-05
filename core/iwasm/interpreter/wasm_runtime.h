@@ -190,7 +190,7 @@ typedef struct WASMModuleInstance {
 
     // The below two are the metadata only. For debugging purposes.
     uint32 wasm_instructions_energy;
-    uint32 native_execution_time_ms;
+    uint32 native_execution_time_us;
     uint32 memory_usage_bytes;
 } WASMModuleInstance;
 
