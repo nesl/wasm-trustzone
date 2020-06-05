@@ -771,7 +771,6 @@ wasm_interp_call_func_native(WASMModuleInstance *module_inst,
 
 #define HANDLE_OP(opcode) HANDLE_##opcode
 #define FETCH_OPCODE_AND_DISPATCH() do {          \
-  module->wasm_instructions_energy++;             \
   uint32 current_time = (uint32)bh_get_tick_ms(); \
   if(current_time - prev_timestamp > 1000) {      \
     module->wasm_instructions_energy = 0;         \
@@ -783,7 +782,17 @@ wasm_interp_call_func_native(WASMModuleInstance *module_inst,
   }                                               \
   goto *handle_table[*frame_ip++];                \
 } while (0)
-#define HANDLE_OP_END() FETCH_OPCODE_AND_DISPATCH()
+#define HANDLE_OP_END() do {                            \
+  if (!instruction_start_time) {                        \
+    wasm_set_exception(module, "failed read time.");    \
+    goto got_exception;                                 \
+  }                                                     \
+  uint32 cur_time = (uint32)bh_get_tick_ms();           \
+  module->wasm_instructions_energy +=                   \
+                    cur_time - instruction_start_time;  \
+  instruction_start_time = 0;                           \
+  FETCH_OPCODE_AND_DISPATCH();                          \
+} while(0)
 
 #else   /* else of WASM_ENABLE_LABELS_AS_VALUES */
 
@@ -796,7 +805,9 @@ static bool
 check_cpu_consumption(WASMModuleInstance *module) {
   uint32 module_index = module->access_control->module_index;
   uint32 max_energy = module->access_control->module_info[module_index]->processor_power_consumption;
-  return (module->native_execution_time_ms + module->wasm_instructions_energy) > max_energy;
+  uint32 cpu_power = module->access_control->processor_power;
+  uint32 cpu_exe_time_ms = module->native_execution_time_ms + module->wasm_instructions_energy;
+  return cpu_power * cpu_exe_time_ms > max_energy;
 }
 
 static void
@@ -834,6 +845,7 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
   uint8 local_type, *global_addr;
   uint32 cache_index;
   uint32 prev_timestamp = module->timestamp;
+  uint32 instruction_start_time = 0; // This is the start time of the instruction.
 
 #if WASM_ENABLE_LABELS_AS_VALUES != 0
   #define HANDLE_OPCODE(op) &&HANDLE_##op
@@ -860,9 +872,11 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
         goto got_exception;
 
       HANDLE_OP (WASM_OP_NOP):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_BLOCK):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         block_ret_type = *frame_ip++;
 
         cache_index = ((uintptr_t)frame_ip) & (uintptr_t)(BLOCK_ADDR_CACHE_SIZE - 1);
@@ -886,11 +900,13 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_LOOP):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         block_ret_type = *frame_ip++;
         PUSH_CSP(BLOCK_TYPE_LOOP, block_ret_type, frame_ip);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_IF):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         block_ret_type = *frame_ip++;
 
         cache_index = ((uintptr_t)frame_ip) & (uintptr_t)(BLOCK_ADDR_CACHE_SIZE - 1);
@@ -930,11 +946,13 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_ELSE):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         /* comes from the if branch in WASM_OP_IF */
         frame_ip = (frame_csp - 1)->target_addr;
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_END):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         if (frame_csp > frame->csp_bottom + 1) {
           POP_CSP();
         }
@@ -948,11 +966,13 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_BR):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         read_leb_uint32(frame_ip, frame_ip_end, depth);
         POP_CSP_N(depth);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_BR_IF):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         read_leb_uint32(frame_ip, frame_ip_end, depth);
         cond = (uint32)POP_I32();
         if (cond)
@@ -960,6 +980,7 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_BR_TABLE):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         read_leb_uint32(frame_ip, frame_ip_end, count);
         if (count <= BR_TABLE_TMP_BUF_LEN)
           depths = depth_buf;
@@ -988,6 +1009,7 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_RETURN):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         frame_sp -= cur_func->ret_cell_num;
         for (i = 0; i < cur_func->ret_cell_num; i++) {
           *prev_frame->sp++ = frame_sp[i];
@@ -995,12 +1017,14 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
         goto return_func;
 
       HANDLE_OP (WASM_OP_CALL):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         read_leb_uint32(frame_ip, frame_ip_end, fidx);
         bh_assert(fidx < module->function_count);
         cur_func = module->functions + fidx;
         goto call_func_from_interp;
 
       HANDLE_OP (WASM_OP_CALL_INDIRECT):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         {
           WASMType *cur_type, *cur_func_type;
 
@@ -1041,18 +1065,21 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
 
       /* parametric instructions */
       HANDLE_OP (WASM_OP_DROP):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         {
           frame_sp--;
           HANDLE_OP_END ();
         }
 
       HANDLE_OP (WASM_OP_DROP_64):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         {
           frame_sp -= 2;
           HANDLE_OP_END ();
         }
 
       HANDLE_OP (WASM_OP_SELECT):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         {
           cond = (uint32)POP_I32();
           frame_sp--;
@@ -1062,6 +1089,7 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
         }
 
       HANDLE_OP (WASM_OP_SELECT_64):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         {
           cond = (uint32)POP_I32();
           frame_sp -= 2;
@@ -1074,6 +1102,7 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
 
       /* variable instructions */
       HANDLE_OP (WASM_OP_GET_LOCAL):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         {
           GET_LOCAL_INDEX_TYPE_AND_OFFSET();
 
@@ -1095,6 +1124,7 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
         }
 
       HANDLE_OP (EXT_OP_GET_LOCAL_FAST):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         {
           local_offset = *frame_ip++;
           if (local_offset & 0x80)
@@ -1105,6 +1135,7 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
         }
 
       HANDLE_OP (WASM_OP_SET_LOCAL):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         {
           GET_LOCAL_INDEX_TYPE_AND_OFFSET();
 
@@ -1126,6 +1157,7 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
         }
 
       HANDLE_OP (EXT_OP_SET_LOCAL_FAST):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         {
           local_offset = *frame_ip++;
           if (local_offset & 0x80)
@@ -1136,6 +1168,7 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
         }
 
       HANDLE_OP (WASM_OP_TEE_LOCAL):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         {
           GET_LOCAL_INDEX_TYPE_AND_OFFSET();
 
@@ -1158,6 +1191,7 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
         }
 
       HANDLE_OP (EXT_OP_TEE_LOCAL_FAST):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         {
           local_offset = *frame_ip++;
           if (local_offset & 0x80)
@@ -1169,6 +1203,7 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
         }
 
       HANDLE_OP (WASM_OP_GET_GLOBAL):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         {
           read_leb_uint32(frame_ip, frame_ip_end, global_idx);
 
@@ -1194,6 +1229,7 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
         }
 
       HANDLE_OP (WASM_OP_SET_GLOBAL):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         {
           read_leb_uint32(frame_ip, frame_ip_end, global_idx);
 
@@ -1234,6 +1270,7 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
       HANDLE_OP (WASM_OP_I64_LOAD32_S):
       HANDLE_OP (WASM_OP_I64_LOAD32_U):
         {
+          instruction_start_time = (uint32)bh_get_tick_ms();
           uint32 offset, flags, addr;
           GET_OPCODE();
           read_leb_uint32(frame_ip, frame_ip_end, flags);
@@ -1314,6 +1351,7 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
       /* memory store instructions */
       HANDLE_OP (WASM_OP_F32_STORE):
         {
+          instruction_start_time = (uint32)bh_get_tick_ms();
           uint32 offset, flags, addr;
           GET_OPCODE();
           read_leb_uint32(frame_ip, frame_ip_end, flags);
@@ -1328,6 +1366,7 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
 
       HANDLE_OP (WASM_OP_F64_STORE):
         {
+          instruction_start_time = (uint32)bh_get_tick_ms();
           uint32 offset, flags, addr;
           GET_OPCODE();
           read_leb_uint32(frame_ip, frame_ip_end, flags);
@@ -1345,6 +1384,7 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
       HANDLE_OP (WASM_OP_I32_STORE8):
       HANDLE_OP (WASM_OP_I32_STORE16):
         {
+          instruction_start_time = (uint32)bh_get_tick_ms();
           uint32 offset, flags, addr;
           uint32 sval;
           GET_OPCODE();
@@ -1373,6 +1413,7 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
       HANDLE_OP (WASM_OP_I64_STORE16):
       HANDLE_OP (WASM_OP_I64_STORE32):
         {
+          instruction_start_time = (uint32)bh_get_tick_ms();
           uint32 offset, flags, addr;
           uint64 sval;
           GET_OPCODE();
@@ -1402,6 +1443,7 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
       /* memory size and memory grow instructions */
       HANDLE_OP (WASM_OP_MEMORY_SIZE):
       {
+        instruction_start_time = (uint32)bh_get_tick_ms();
         uint32 reserved;
         read_leb_uint32(frame_ip, frame_ip_end, reserved);
         PUSH_I32(memory->cur_page_count);
@@ -1411,6 +1453,7 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
 
       HANDLE_OP (WASM_OP_MEMORY_GROW):
       {
+        instruction_start_time = (uint32)bh_get_tick_ms();
         uint32 reserved, delta, prev_page_count = memory->cur_page_count;
 
         read_leb_uint32(frame_ip, frame_ip_end, reserved);
@@ -1440,15 +1483,18 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
 
       /* constant instructions */
       HANDLE_OP (WASM_OP_I32_CONST):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_I_CONST(int32, I32);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_I64_CONST):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_I_CONST(int64, I64);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_F32_CONST):
         {
+          instruction_start_time = (uint32)bh_get_tick_ms();
           uint8 *p_float = (uint8*)frame_sp++;
           for (i = 0; i < sizeof(float32); i++)
             *p_float++ = *frame_ip++;
@@ -1457,6 +1503,7 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
 
       HANDLE_OP (WASM_OP_F64_CONST):
         {
+          instruction_start_time = (uint32)bh_get_tick_ms();
           uint8 *p_float = (uint8*)frame_sp++;
           frame_sp++;
           for (i = 0; i < sizeof(float64); i++)
@@ -1466,171 +1513,212 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
 
       /* comparison instructions of i32 */
       HANDLE_OP (WASM_OP_I32_EQZ):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_EQZ(I32);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_I32_EQ):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_CMP(uint32, I32, ==);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_I32_NE):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_CMP(uint32, I32, !=);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_I32_LT_S):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_CMP(int32, I32, <);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_I32_LT_U):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_CMP(uint32, I32, <);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_I32_GT_S):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_CMP(int32, I32, >);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_I32_GT_U):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_CMP(uint32, I32, >);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_I32_LE_S):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_CMP(int32, I32, <=);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_I32_LE_U):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_CMP(uint32, I32, <=);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_I32_GE_S):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_CMP(int32, I32, >=);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_I32_GE_U):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_CMP(uint32, I32, >=);
         HANDLE_OP_END ();
 
       /* comparison instructions of i64 */
       HANDLE_OP (WASM_OP_I64_EQZ):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_EQZ(I64);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_I64_EQ):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_CMP(uint64, I64, ==);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_I64_NE):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_CMP(uint64, I64, !=);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_I64_LT_S):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_CMP(int64, I64, <);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_I64_LT_U):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_CMP(uint64, I64, <);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_I64_GT_S):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_CMP(int64, I64, >);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_I64_GT_U):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_CMP(uint64, I64, >);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_I64_LE_S):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_CMP(int64, I64, <=);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_I64_LE_U):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_CMP(uint64, I64, <=);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_I64_GE_S):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_CMP(int64, I64, >=);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_I64_GE_U):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_CMP(uint64, I64, >=);
         HANDLE_OP_END ();
 
       /* comparison instructions of f32 */
       HANDLE_OP (WASM_OP_F32_EQ):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_CMP(float32, F32, ==);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_F32_NE):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_CMP(float32, F32, !=);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_F32_LT):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_CMP(float32, F32, <);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_F32_GT):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_CMP(float32, F32, >);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_F32_LE):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_CMP(float32, F32, <=);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_F32_GE):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_CMP(float32, F32, >=);
         HANDLE_OP_END ();
 
       /* comparison instructions of f64 */
       HANDLE_OP (WASM_OP_F64_EQ):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_CMP(float64, F64, ==);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_F64_NE):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_CMP(float64, F64, !=);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_F64_LT):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_CMP(float64, F64, <);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_F64_GT):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_CMP(float64, F64, >);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_F64_LE):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_CMP(float64, F64, <=);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_F64_GE):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_CMP(float64, F64, >=);
         HANDLE_OP_END ();
 
       /* numberic instructions of i32 */
       HANDLE_OP (WASM_OP_I32_CLZ):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_BIT_COUNT(uint32, I32, clz32);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_I32_CTZ):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_BIT_COUNT(uint32, I32, ctz32);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_I32_POPCNT):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_BIT_COUNT(uint32, I32, popcount32);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_I32_ADD):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_NUMERIC(uint32, uint32, I32, +);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_I32_SUB):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_NUMERIC(uint32, uint32, I32, -);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_I32_MUL):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_NUMERIC(uint32, uint32, I32, *);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_I32_DIV_S):
       {
+        instruction_start_time = (uint32)bh_get_tick_ms();
         int32 a, b;
 
         b = POP_I32();
@@ -1649,6 +1737,7 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
 
       HANDLE_OP (WASM_OP_I32_DIV_U):
       {
+        instruction_start_time = (uint32)bh_get_tick_ms();
         uint32 a, b;
 
         b = (uint32)POP_I32();
@@ -1663,6 +1752,7 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
 
       HANDLE_OP (WASM_OP_I32_REM_S):
       {
+        instruction_start_time = (uint32)bh_get_tick_ms();
         int32 a, b;
 
         b = POP_I32();
@@ -1681,6 +1771,7 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
 
       HANDLE_OP (WASM_OP_I32_REM_U):
       {
+        instruction_start_time = (uint32)bh_get_tick_ms();
         uint32 a, b;
 
         b = (uint32)POP_I32();
@@ -1694,19 +1785,23 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
       }
 
       HANDLE_OP (WASM_OP_I32_AND):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_NUMERIC(uint32, uint32, I32, &);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_I32_OR):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_NUMERIC(uint32, uint32, I32, |);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_I32_XOR):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_NUMERIC(uint32, uint32, I32, ^);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_I32_SHL):
       {
+        instruction_start_time = (uint32)bh_get_tick_ms();
 #if defined(BUILD_TARGET_X86_64) || defined(BUILD_TARGET_X86_32)
         DEF_OP_NUMERIC(uint32, uint32, I32, <<);
 #else
@@ -1717,6 +1812,7 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
 
       HANDLE_OP (WASM_OP_I32_SHR_S):
       {
+        instruction_start_time = (uint32)bh_get_tick_ms();
 #if defined(BUILD_TARGET_X86_64) || defined(BUILD_TARGET_X86_32)
         DEF_OP_NUMERIC(int32, uint32, I32, >>);
 #else
@@ -1727,6 +1823,7 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
 
       HANDLE_OP (WASM_OP_I32_SHR_U):
       {
+        instruction_start_time = (uint32)bh_get_tick_ms();
 #if defined(BUILD_TARGET_X86_64) || defined(BUILD_TARGET_X86_32)
         DEF_OP_NUMERIC(uint32, uint32, I32, >>);
 #else
@@ -1737,6 +1834,7 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
 
       HANDLE_OP (WASM_OP_I32_ROTL):
       {
+        instruction_start_time = (uint32)bh_get_tick_ms();
         uint32 a, b;
 
         b = (uint32)POP_I32();
@@ -1747,6 +1845,7 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
 
       HANDLE_OP (WASM_OP_I32_ROTR):
       {
+        instruction_start_time = (uint32)bh_get_tick_ms();
         uint32 a, b;
 
         b = (uint32)POP_I32();
@@ -1757,31 +1856,38 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
 
       /* numberic instructions of i64 */
       HANDLE_OP (WASM_OP_I64_CLZ):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_BIT_COUNT(uint64, I64, clz64);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_I64_CTZ):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_BIT_COUNT(uint64, I64, ctz64);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_I64_POPCNT):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_BIT_COUNT(uint64, I64, popcount64);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_I64_ADD):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_NUMERIC_64(uint64, uint64, I64, +);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_I64_SUB):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_NUMERIC_64(uint64, uint64, I64, -);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_I64_MUL):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_NUMERIC_64(uint64, uint64, I64, *);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_I64_DIV_S):
       {
+        instruction_start_time = (uint32)bh_get_tick_ms();
         int64 a, b;
 
         b = POP_I64();
@@ -1800,6 +1906,7 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
 
       HANDLE_OP (WASM_OP_I64_DIV_U):
       {
+        instruction_start_time = (uint32)bh_get_tick_ms();
         uint64 a, b;
 
         b = (uint64)POP_I64();
@@ -1814,6 +1921,7 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
 
       HANDLE_OP (WASM_OP_I64_REM_S):
       {
+        instruction_start_time = (uint32)bh_get_tick_ms();
         int64 a, b;
 
         b = POP_I64();
@@ -1832,6 +1940,7 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
 
       HANDLE_OP (WASM_OP_I64_REM_U):
       {
+        instruction_start_time = (uint32)bh_get_tick_ms();
         uint64 a, b;
 
         b = (uint64)POP_I64();
@@ -1845,19 +1954,23 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
       }
 
       HANDLE_OP (WASM_OP_I64_AND):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_NUMERIC_64(uint64, uint64, I64, &);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_I64_OR):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_NUMERIC_64(uint64, uint64, I64, |);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_I64_XOR):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_NUMERIC_64(uint64, uint64, I64, ^);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_I64_SHL):
       {
+        instruction_start_time = (uint32)bh_get_tick_ms();
 #if defined(BUILD_TARGET_X86_64) || defined(BUILD_TARGET_X86_32)
         DEF_OP_NUMERIC_64(uint64, uint64, I64, <<);
 #else
@@ -1868,6 +1981,7 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
 
       HANDLE_OP (WASM_OP_I64_SHR_S):
       {
+        instruction_start_time = (uint32)bh_get_tick_ms();
 #if defined(BUILD_TARGET_X86_64) || defined(BUILD_TARGET_X86_32)
         DEF_OP_NUMERIC_64(int64, uint64, I64, >>);
 #else
@@ -1878,6 +1992,7 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
 
       HANDLE_OP (WASM_OP_I64_SHR_U):
       {
+        instruction_start_time = (uint32)bh_get_tick_ms();
 #if defined(BUILD_TARGET_X86_64) || defined(BUILD_TARGET_X86_32)
         DEF_OP_NUMERIC_64(uint64, uint64, I64, >>);
 #else
@@ -1888,6 +2003,7 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
 
       HANDLE_OP (WASM_OP_I64_ROTL):
       {
+        instruction_start_time = (uint32)bh_get_tick_ms();
         uint64 a, b;
 
         b = (uint64)POP_I64();
@@ -1898,6 +2014,7 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
 
       HANDLE_OP (WASM_OP_I64_ROTR):
       {
+        instruction_start_time = (uint32)bh_get_tick_ms();
         uint64 a, b;
 
         b = (uint64)POP_I64();
@@ -1908,11 +2025,13 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
 
       /* numberic instructions of f32 */
       HANDLE_OP (WASM_OP_F32_ABS):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_MATH(float32, F32, fabs);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_F32_NEG):
       {
+          instruction_start_time = (uint32)bh_get_tick_ms();
           int32 i32 = (int32)frame_sp[-1];
           int32 sign_bit = i32 & (1 << 31);
           if (sign_bit)
@@ -1923,43 +2042,53 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
       }
 
       HANDLE_OP (WASM_OP_F32_CEIL):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_MATH(float32, F32, ceil);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_F32_FLOOR):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_MATH(float32, F32, floor);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_F32_TRUNC):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_MATH(float32, F32, trunc);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_F32_NEAREST):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_MATH(float32, F32, rint);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_F32_SQRT):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_MATH(float32, F32, sqrt);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_F32_ADD):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_NUMERIC(float32, float32, F32, +);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_F32_SUB):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_NUMERIC(float32, float32, F32, -);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_F32_MUL):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_NUMERIC(float32, float32, F32, *);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_F32_DIV):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_NUMERIC(float32, float32, F32, /);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_F32_MIN):
       {
+        instruction_start_time = (uint32)bh_get_tick_ms();
         float32 a, b;
 
         b = POP_F32();
@@ -1976,6 +2105,7 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
 
       HANDLE_OP (WASM_OP_F32_MAX):
       {
+        instruction_start_time = (uint32)bh_get_tick_ms();
         float32 a, b;
 
         b = POP_F32();
@@ -1992,6 +2122,7 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
 
       HANDLE_OP (WASM_OP_F32_COPYSIGN):
       {
+        instruction_start_time = (uint32)bh_get_tick_ms();
         float32 a, b;
 
         b = POP_F32();
@@ -2002,11 +2133,13 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
 
       /* numberic instructions of f64 */
       HANDLE_OP (WASM_OP_F64_ABS):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_MATH(float64, F64, fabs);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_F64_NEG):
       {
+          instruction_start_time = (uint32)bh_get_tick_ms();
           int64 i64 = GET_I64_FROM_ADDR(frame_sp - 2);
           int64 sign_bit = i64 & (((int64)1) << 63);
           if (sign_bit)
@@ -2017,43 +2150,53 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
       }
 
       HANDLE_OP (WASM_OP_F64_CEIL):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_MATH(float64, F64, ceil);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_F64_FLOOR):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_MATH(float64, F64, floor);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_F64_TRUNC):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_MATH(float64, F64, trunc);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_F64_NEAREST):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_MATH(float64, F64, rint);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_F64_SQRT):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_MATH(float64, F64, sqrt);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_F64_ADD):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_NUMERIC_64(float64, float64, F64, +);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_F64_SUB):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_NUMERIC_64(float64, float64, F64, -);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_F64_MUL):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_NUMERIC_64(float64, float64, F64, *);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_F64_DIV):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_NUMERIC_64(float64, float64, F64, /);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_F64_MIN):
       {
+        instruction_start_time = (uint32)bh_get_tick_ms();
         float64 a, b;
 
         b = POP_F64();
@@ -2070,6 +2213,7 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
 
       HANDLE_OP (WASM_OP_F64_MAX):
       {
+        instruction_start_time = (uint32)bh_get_tick_ms();
         float64 a, b;
 
         b = POP_F64();
@@ -2086,6 +2230,7 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
 
       HANDLE_OP (WASM_OP_F64_COPYSIGN):
       {
+        instruction_start_time = (uint32)bh_get_tick_ms();
         float64 a, b;
 
         b = POP_F64();
@@ -2097,12 +2242,14 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
       /* conversions of i32 */
       HANDLE_OP (WASM_OP_I32_WRAP_I64):
         {
+          instruction_start_time = (uint32)bh_get_tick_ms();
           int32 value = (int32)(POP_I64() & 0xFFFFFFFFLL);
           PUSH_I32(value);
           HANDLE_OP_END ();
         }
 
       HANDLE_OP (WASM_OP_I32_TRUNC_S_F32):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         /* We don't use INT32_MIN/INT32_MAX/UINT32_MIN/UINT32_MAX,
            since float/double values of ieee754 cannot precisely represent
            all int32/uint32/int64/uint64 values, e.g.:
@@ -2113,88 +2260,107 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_I32_TRUNC_U_F32):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_TRUNC(uint32, I32, float32, F32, <= -1.0f,
                                                 >= 4294967296.0f);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_I32_TRUNC_S_F64):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_TRUNC(int32, I32, float64, F64, <= -2147483649.0,
                                                >= 2147483648.0);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_I32_TRUNC_U_F64):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_TRUNC(uint32, I32, float64, F64, <= -1.0 ,
                                                 >= 4294967296.0);
         HANDLE_OP_END ();
 
       /* conversions of i64 */
       HANDLE_OP (WASM_OP_I64_EXTEND_S_I32):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_CONVERT(int64, I64, int32, I32);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_I64_EXTEND_U_I32):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_CONVERT(int64, I64, uint32, I32);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_I64_TRUNC_S_F32):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_TRUNC(int64, I64, float32, F32, <= -9223373136366403584.0f,
                                                >= 9223372036854775808.0f);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_I64_TRUNC_U_F32):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_TRUNC(uint64, I64, float32, F32, <= -1.0f,
                                                 >= 18446744073709551616.0f);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_I64_TRUNC_S_F64):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_TRUNC(int64, I64, float64, F64, <= -9223372036854777856.0,
                                                >= 9223372036854775808.0);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_I64_TRUNC_U_F64):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_TRUNC(uint64, I64, float64, F64, <= -1.0,
                                                 >= 18446744073709551616.0);
         HANDLE_OP_END ();
 
       /* conversions of f32 */
       HANDLE_OP (WASM_OP_F32_CONVERT_S_I32):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_CONVERT(float32, F32, int32, I32);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_F32_CONVERT_U_I32):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_CONVERT(float32, F32, uint32, I32);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_F32_CONVERT_S_I64):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_CONVERT(float32, F32, int64, I64);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_F32_CONVERT_U_I64):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_CONVERT(float32, F32, uint64, I64);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_F32_DEMOTE_F64):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_CONVERT(float32, F32, float64, F64);
         HANDLE_OP_END ();
 
       /* conversions of f64 */
       HANDLE_OP (WASM_OP_F64_CONVERT_S_I32):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_CONVERT(float64, F64, int32, I32);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_F64_CONVERT_U_I32):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_CONVERT(float64, F64, uint32, I32);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_F64_CONVERT_S_I64):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_CONVERT(float64, F64, int64, I64);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_F64_CONVERT_U_I64):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_CONVERT(float64, F64, uint64, I64);
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_F64_PROMOTE_F32):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         DEF_OP_CONVERT(float64, F64, float32, F32);
         HANDLE_OP_END ();
 
@@ -2203,9 +2369,11 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
       HANDLE_OP (WASM_OP_I64_REINTERPRET_F64):
       HANDLE_OP (WASM_OP_F32_REINTERPRET_I32):
       HANDLE_OP (WASM_OP_F64_REINTERPRET_I64):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         HANDLE_OP_END ();
 
       HANDLE_OP (WASM_OP_IMPDEP):
+        instruction_start_time = (uint32)bh_get_tick_ms();
         frame = prev_frame;
         frame_ip = frame->ip;
         frame_sp = frame->sp;
