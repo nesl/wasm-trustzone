@@ -1550,12 +1550,23 @@ wasm_enlarge_memory(WASMModuleInstance *module, uint32 inc_page_count)
     return true;
 }
 
+void get_imu_sensor(uint32* return_val) {
+  return_val[0] = get_renju_rand() % 100;
+  return_val[1] = get_renju_rand() % 100;
+  return_val[2] = get_renju_rand() % 100;
+}
+
 void
 test_wasm_runtime_native_print(void) {
+  uint32* imu_data = wasm_runtime_malloc(sizeof(uint32)*3);
+  get_imu_sensor(imu_data);
   printf("\n\n\n\n");
   printf("==========start=========\n");
   printf("I have nothing to say\n");
   printf("print here!\n");
+  printf("imu0: %u\n", imu_data[0]);
+  printf("imu1: %u\n", imu_data[1]);
+  printf("imu2: %u\n", imu_data[2]);
   printf("===========end==========\n");
   printf("\n\n\n\n");
 }

@@ -16,3 +16,9 @@ os_time_get_renju_boot_microsecond()
 {
   return k_uptime_get_32_us();
 }
+
+uint32
+get_renju_rand()
+{
+  return sys_rand32_get();
+}
