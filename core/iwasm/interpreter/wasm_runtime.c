@@ -21,19 +21,19 @@ name:motion,id:2,address:0x8ffffff0,power:20,concurrent_access:65\n\
 name:microphone,id:3,address:0x8FFFFFEC,power:100,concurrent_access:3\n\
 name:speaker,id:4,address:0x8FFFFFE4,power:400,concurrent_access:1\n\
 name:door_motor,id:5,address:0x8FFFFFE0,power:300,concurrent_access:1\n\
-name:window_motor,id:6,address:0x8FFFFFC0,power:350,concurrent_access:1\n\
+name:propeller,id:6,address:0x8FFFFFC0,power:350,concurrent_access:1\n\
 mcu,power:1\n\
 ";
 
 char* module_spec =
 "\
-name:regular1,device:imu-10000.motion-9000.speaker-20000.window_motor-5000,mcu:5000,memory:200000\n\
+name:regular1,device:imu-10000.motion-9000.speaker-20000.propeller-5000,mcu:5000,memory:200000\n\
 name:regular2,device:camera-10000.speaker-30000,mcu:9000,memory:200000\n\
 name:regular3,device:camera-10000.microphone-5000,mcu:9000,memory:200000\n\
 name:max_concurrent1,device:camera-10000,mcu:9000,memory:200000\n\
 name:max_concurrent2,device:microphone-10000,mcu:9000,memory:200000\n\
 name:max_concurrent3,device:microphone-10000.door_motor-10000,mcu:9000,memory:500000\n\
-name:max_concurrent4,device:microphone-10000.window_motor-10000,mcu:9000,memory:500000\n\
+name:max_concurrent4,device:microphone-10000.propeller-10000,mcu:9000,memory:500000\n\
 name:low_pow,device:imu-500.camera-1000.door_motor-900,mcu:5000,memory:300000\n\
 name:low_mcu,device:imu-10000,mcu:200,memory:500000\n\
 name:low_memory,device:imu-10000,mcu:10000,memory:10\n\
@@ -1556,13 +1556,56 @@ void get_imu_sensor(uint32* return_val) {
   return_val[2] = get_renju_rand() % 100;
 }
 
-// It returns 256*256 double array.
+// It returns 20*20 double array.
 void get_camera_data(uint32** image) {
   for(int i = 0 ; i < 20 ; i++) {
     for(int j = 0; j < 20 ; j++) {
       image[i][j] = get_renju_rand() % 100;
     }
   }
+}
+
+void get_motion_data(uint32* direction) {
+  direction[0] = get_renju_rand() % 4;
+}
+
+// Returns a single array
+void get_microphone_data(uint32* mic_data) {
+  for(int i = 0; i < 20 ; i++) {
+    mic_data[i] = get_renju_rand() % 4;
+  }
+}
+
+void set_speaker_data(uint32* speaker_data)
+{
+  //output the speaker data to the device through driver.
+  (void) &speaker_data;
+}
+
+void set_door_motor(uint32 state){
+  //output to the door motor.
+  (void) &state;
+}
+
+void set_propeller(uint32* state){
+  // 4 propellers.
+  (void)&(state[0]);
+  (void)&(state[1]);
+  (void)&(state[2]);
+  (void)&(state[3]);
+}
+
+// I need to think about how to implement this function.
+// third param: return val from the sesnors
+void aerogel_sensor_module(char* name,
+    aerogel_sensor* sensor_list,
+    uint32 len_sensor_list,
+    aerogel_val* ret_val,
+    uint32 len_ret_val,
+    aerogel_actuator* actuator_list,
+    uint32 len_actuator_list)
+{
+
 }
 
 void

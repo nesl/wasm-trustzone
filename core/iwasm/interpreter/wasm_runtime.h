@@ -15,6 +15,23 @@
 extern "C" {
 #endif
 
+typedef struct aerogel_sensor {
+  char *sensor_name;
+  uint32 freq;
+} aerogel_sensor;
+
+typedef struct aerogel_val {
+  char *sensor_name;
+  uint32* value;
+  uint32 len_value;
+} aerogel_val;
+
+typedef struct aerogel_actuator {
+  char *actuator_name;
+  uint32* val;
+  uint32 len_val;
+} aerogel_actuator;
+
 typedef struct WASMMemoryInstance {
     /* Number bytes per page */
     uint32 num_bytes_per_page;
