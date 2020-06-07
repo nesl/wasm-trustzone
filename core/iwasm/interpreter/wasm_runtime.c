@@ -1556,10 +1556,33 @@ void get_imu_sensor(uint32* return_val) {
   return_val[2] = get_renju_rand() % 100;
 }
 
+// It returns 256*256 double array.
+void get_camera_data(uint32** image) {
+  for(int i = 0 ; i < 20 ; i++) {
+    for(int j = 0; j < 20 ; j++) {
+      image[i][j] = get_renju_rand() % 100;
+    }
+  }
+}
+
 void
 test_wasm_runtime_native_print(void) {
   uint32* imu_data = wasm_runtime_malloc(sizeof(uint32)*3);
   get_imu_sensor(imu_data);
+
+  uint32** image = wasm_runtime_malloc(sizeof(uint32*)*20);
+  if(!image){
+    printf("image init failed!\n");
+  }
+  for(int i = 0; i < 20; i++) {
+    image[i] = wasm_runtime_malloc(sizeof(uint32)*20);
+    if(!image[i]){
+      printf("image[%d] failed!\n", i);
+    }
+  }
+
+  get_camera_data(image);
+
   printf("\n\n\n\n");
   printf("==========start=========\n");
   printf("I have nothing to say\n");
