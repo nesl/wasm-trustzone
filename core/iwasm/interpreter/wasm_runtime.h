@@ -18,11 +18,12 @@ extern "C" {
 typedef struct aerogel_sensor {
   char *sensor_name;
   uint32 freq;
+  uint32 duration; //in usec
 } aerogel_sensor;
 
 typedef struct aerogel_val {
   char *sensor_name;
-  uint32* value;
+  uint32** value;
   uint32 len_value;
 } aerogel_val;
 
@@ -30,6 +31,8 @@ typedef struct aerogel_actuator {
   char *actuator_name;
   uint32* val;
   uint32 len_val;
+  uint32 repetition;
+  uint32 latency;
 } aerogel_actuator;
 
 typedef struct WASMMemoryInstance {
@@ -135,6 +138,7 @@ typedef struct SensorActuatorInfo {
   uint32 power;
   uint32 allowed_power_consumption;
   uint32 used_power;
+  uint32 timestamp; //timestamp used to compute the power consumption.
 } SensorActuatorInfo;
 
 // The access control information for each module

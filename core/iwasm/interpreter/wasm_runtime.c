@@ -39,6 +39,12 @@ name:low_mcu,device:imu-10000,mcu:200,memory:500000\n\
 name:low_memory,device:imu-10000,mcu:10000,memory:10\n\
 ";
 
+char* sensor_index_mapping[] = {"imu",
+      "camera", "motion",
+      "microphone", "speaker",
+      "door_motor", "propeller"};
+uint32 sensor_index_mapping_len = 7;
+
 static void
 set_error_buf(char *error_buf, uint32 error_buf_size, const char *string)
 {
@@ -1558,8 +1564,8 @@ void get_imu_sensor(uint32* return_val) {
 
 // It returns 20*20 double array.
 void get_camera_data(uint32** image) {
-  for(int i = 0 ; i < 20 ; i++) {
-    for(int j = 0; j < 20 ; j++) {
+  for(int i = 0 ; i < 10 ; i++) {
+    for(int j = 0; j < 10 ; j++) {
       image[i][j] = get_renju_rand() % 100;
     }
   }
@@ -1571,33 +1577,151 @@ void get_motion_data(uint32* direction) {
 
 // Returns a single array
 void get_microphone_data(uint32* mic_data) {
-  for(int i = 0; i < 20 ; i++) {
+  for(int i = 0; i < 10 ; i++) {
     mic_data[i] = get_renju_rand() % 4;
   }
 }
 
-void set_speaker_data(uint32* speaker_data)
+void set_speaker_data(uint32* speaker_data, uint32 latency)
 {
   //output the speaker data to the device through driver.
   (void) &speaker_data;
+  sleep_us(latency);
 }
 
-void set_door_motor(uint32 state){
+void set_door_motor(uint32* state, uint32 latency){
   //output to the door motor.
   (void) &state;
+  sleep_us(latency);
 }
 
-void set_propeller(uint32* state){
+void set_propeller(uint32* state, uint32 latency){
   // 4 propellers.
   (void)&(state[0]);
   (void)&(state[1]);
   (void)&(state[2]);
   (void)&(state[3]);
+  sleep_us(latency);
+}
+
+void get_imu(uint32* data, uint32 freq)
+{
+  uint32 latency = 1000000/freq;
+  get_imu_sensor(data);
+  sleep_us(latency);
+}
+
+void get_camera(uint32* data, uint32 freq)
+{
+  uint32 latency = 1000000/freq;
+  uint32 **temp = wasm_runtime_malloc(sizeof(uint32*) * 10);
+  for(int i = 0; i < 10; i++){
+    temp[i] = wasm_runtime_malloc(sizeof(uint32) * 10);
+  }
+  get_camera_data(temp);
+  for(int i = 0 ; i < 10;i++){
+    for(int j = 0;j < 10;j++){
+      data[i*10+j] = temp[i][j];
+    }
+  }
+  sleep_us(latency);
+}
+
+void get_motion(uint32* data, uint32 freq)
+{
+  uint32 latency = 1000000/freq;
+  get_motion_data(data);
+  sleep_us(latency);
+}
+
+void get_microphone(uint32* data, uint32 freq)
+{
+  uint32 latency = 1000000/freq;
+  get_microphone_data(data);
+  sleep_us(latency);
+}
+
+bool check_access_name(char* module_name,
+    char* sensor_name)
+{
+  char* tmp = module_spec;
+  if(!strstr(module_spec, module_name)) {
+    printf("Name not found. No access to any sensors.\n");
+    return false;
+  }
+  char access_string[200];
+  int j = 0;
+  while(*tmp != '\n' && *tmp) {
+    access_string[j++] = *tmp;
+    ++tmp;
+  }
+  if(strstr(access_string, sensor_name)){
+    return true;
+  }
+  else return false;
+}
+
+bool check_access_concurrency(char* sensor_name, uint32 max_concurrent)
+{
+  int i = 0;
+  for(; i < sensor_index_mapping_len; i++){
+    if(strstr(sensor_index_mapping[i], sensor_name))
+    {
+      if(sensor_actuator_concurrent_access[i] < max_concurrent){
+        sensor_actuator_concurrent_access[i]++;
+        return false;
+      }
+      return true;
+    }
+  }
+  return true;
+}
+
+// return true means should not execute.
+bool check_access_energy(WASMModuleInstance* module_inst, char* peripheral_name)
+{
+  uint32 peripheral_id = -1;
+  uint32 i = 0;
+  for(; i < sensor_index_mapping_len; i++){
+    if(strstr(sensor_index_mapping[i], peripheral_name))
+    {
+      peripheral_id = i;
+      break;
+    }
+  }
+
+  if(peripheral_id == -1) {
+    printf("check_access_energy. Sensor: %s not found.\n", peripheral_name);
+    return true;
+  }
+
+  uint32 ac_module_index = module_inst->access_control->module_index;
+  AccessControlModule* access_control_module = module_inst->access_control->module_info[ac_module_index];
+  for(i = 0 ; i < access_control_module->num_authorized_sensor_actuator; i++){
+    if(access_control_module->authorized_sensor_actuator[i]->id == peripheral_id){
+      SensorActuatorInfo* sensor_info = access_control_module->authorized_sensor_actuator[i];
+      uint32 cur_time = bh_get_tick_us();
+      if(cur_time - sensor_info->timestamp > 10000000) {
+        sensor_info->timestamp = cur_time;
+        sensor_info->used_power = 0;
+        return false;
+      }
+
+      sensor_info->used_power += sensor_info->power * 1;
+      if(sensor_info->allowed_power_consumption < sensor_info->used_power) {
+        sensor_info->used_power = 0;
+        return true;
+      }
+      return false;
+    }
+  }
+  return true;
 }
 
 // I need to think about how to implement this function.
 // third param: return val from the sesnors
-void aerogel_sensor_module(char* name,
+void aerogel_sensor_module(WASMModuleInstance* module_inst,
+    char* module_name,
     aerogel_sensor* sensor_list,
     uint32 len_sensor_list,
     aerogel_val* ret_val,
@@ -1605,7 +1729,104 @@ void aerogel_sensor_module(char* name,
     aerogel_actuator* actuator_list,
     uint32 len_actuator_list)
 {
+  for(uint32 i = 0 ; i < len_actuator_list; i++){
+    uint32 i = 0;
 
+    char* name = actuator_list[i].actuator_name;
+    char* tmp = device_spec;
+    tmp = strstr(tmp, name);
+    tmp = strstr(tmp, "concurrent_access");
+    tmp += strlen("concurrent_access");
+    char temp[20];
+    int j = 0;
+    while(tmp[j] != '\n'){
+      temp[j] = tmp[j];
+      ++j;
+    }
+    uint32 max_access = (uint32)atoi(temp);
+
+    if(check_access_name(module_name, name) ||
+       check_access_energy(module_inst, name) ||
+       check_access_concurrency(name, max_access))
+    {
+      printf("Actuator access failed. Need further debugging.\n");
+      continue;
+    }
+
+    uint32 repetition = actuator_list[i].repetition;
+    uint32 latency = actuator_list[i].latency;
+
+    for(uint32 k = 0 ; k < repetition; k++){
+      if (!strcmp(name, "speaker")) {
+        set_speaker_data(actuator_list[i].val, latency);
+      }
+      else if (!strcmp(name, "door_motor")) {
+        set_door_motor(actuator_list[i].val, latency);
+      }
+      else if (!strcmp(name, "propeller")) {
+        set_propeller(actuator_list[i].val, latency);
+      }
+      else {
+        printf("Error! Unknown actuator with name: %s\n", name);
+        continue;
+      }
+    }
+  }
+
+  for(uint32 i = 0 ; i < len_sensor_list; i++){
+    uint32 i = 0;
+
+    char* name = sensor_list[i].sensor_name;
+    char* tmp = device_spec;
+    tmp = strstr(tmp, name);
+    tmp = strstr(tmp, "concurrent_access");
+    tmp += strlen("concurrent_access");
+    char temp[20];
+    int j = 0;
+    while(tmp[j] != '\n'){
+      temp[j] = tmp[j];
+      ++j;
+    }
+    uint32 max_access = (uint32)atoi(temp);
+
+    if(check_access_name(module_name, name) ||
+       check_access_energy(module_inst, name) ||
+       check_access_concurrency(name, max_access))
+    {
+      printf("Sensor access failed. Need further debugging.\n");
+      continue;
+    }
+
+    uint32 freq = sensor_list[i].freq;
+
+    // how many repetitions do we need? durating / latency.
+    uint32 repetition = sensor_list[i].duration / (1000000/freq);
+    ret_val[i].sensor_name = name;
+    ret_val[i].value = wasm_runtime_malloc(sizeof(uint32) * repetition);
+
+    for(uint32 k = 0 ; k < repetition; k++){
+      if(!strcmp(name, "imu")) {
+        ret_val[i].value[k] = wasm_runtime_malloc(sizeof(uint32) * 3);
+        get_imu((ret_val[i].value[k]), freq);
+      }
+      else if(!strcmp(name, "camera")) {
+        ret_val[i].value[k] = wasm_runtime_malloc(sizeof(uint32) * 100);
+        get_camera((ret_val[i].value[k]), freq);
+      }
+      else if(!strcmp(name, "motion")) {
+        ret_val[i].value[k] = wasm_runtime_malloc(sizeof(uint32) * 1);
+        get_motion((ret_val[i].value[k]), freq);
+      }
+      else if(!strcmp(name, "microphone")) {
+        ret_val[i].value[k] = wasm_runtime_malloc(sizeof(uint32) * 10);
+        get_microphone((ret_val[i].value[k]), freq);
+      }
+      else {
+        printf("Error! Unknown sensor with name: %s\n", name);
+        continue;
+      }
+    }
+  }
 }
 
 void

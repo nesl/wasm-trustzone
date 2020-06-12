@@ -22,3 +22,8 @@ get_renju_rand()
 {
   return sys_rand32_get();
 }
+
+void sleep_us(uint32 microseconds)
+{
+  k_usleep(microseconds);
+}

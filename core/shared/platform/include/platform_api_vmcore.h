@@ -65,6 +65,9 @@ uint32 os_time_get_renju_boot_microsecond(void);
 // Get the random number from Zephyr.
 uint32 get_renju_rand(void);
 
+// Sleep for a specific time
+void sleep_us(uint32 microseconds);
+
 /**
  * Get current thread id.
  * Implementation optional: Used by runtime for logging only.
