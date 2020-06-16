@@ -27,7 +27,7 @@ mcu,power:1\n\
 
 char* module_spec =
 "\
-name:regular1,device:imu-10000.motion-9000.speaker-20000.propeller-5000,mcu:5000,memory:200000\n\
+name:regular1,device:imu-10000.motion-9000.speaker-20000.propeller-5000,mcu:9000,memory:200000\n\
 name:regular2,device:camera-10000.speaker-30000,mcu:9000,memory:200000\n\
 name:regular3,device:camera-10000.microphone-5000,mcu:9000,memory:200000\n\
 name:max_concurrent1,device:camera-10000,mcu:9000,memory:200000\n\
@@ -948,6 +948,27 @@ check_memory_usage(WASMModuleInstance* module_inst)
   return module_inst->memory_usage_bytes <= specified_memory;
 }
 
+// add the index of the module from its name
+void wasm_add_index_from_name(WASMModuleInstance* module_inst, char* name)
+{
+  char* tmp = module_spec;
+  char* start_tmp = module_spec; // at the start of module_spec, used to count '\n'
+  uint32 module_index = 0;
+  tmp = strstr(tmp, name);
+
+  while(start_tmp != tmp) {
+    if(*start_tmp == '\n') {
+      ++module_index;
+    }
+    ++start_tmp;
+  }
+
+  module_inst->access_control->module_index = module_index;
+  module_inst->name = wasm_runtime_malloc(strlen(name) + 1);
+  strcpy(module_inst->name, name);
+  // printf("Calling here name: %s, index: %u\n", module_inst->name, module_inst->access_control->module_index);
+}
+
 /**
  * Instantiate module
  */
@@ -1829,10 +1850,45 @@ void aerogel_sensor_module(WASMModuleInstance* module_inst,
   }
 }
 
+void test_aerogel_sensor_module(WASMModuleInstance *module_inst)
+{
+  aerogel_sensor sensor1;
+  sensor1.sensor_name = "imu";
+  sensor1.freq = 60;
+  sensor1.duration = 100000;
+
+  aerogel_sensor sensor2;
+  sensor2.sensor_name = "motion";
+  sensor2.freq = 10;
+  sensor2.duration = 100000;
+
+  aerogel_sensor* sensors = wasm_runtime_malloc(sizeof(aerogel_sensor) * 2);
+  uint32 len_sensor_list = 2;
+
+  aerogel_val* ret_val = wasm_runtime_malloc(sizeof(aerogel_val) * 2);
+  uint32 len_ret_val = 2;
+
+  aerogel_actuator* actuator = wasm_runtime_malloc(sizeof(aerogel_actuator) * 1);
+  uint32 len_actuator_list = 1;
+  aerogel_actuator actuator1;
+  actuator1.actuator_name = "propeller";
+  uint32 tmp_value = 0;
+  actuator1.val = &tmp_value;
+  actuator1.len_val = 1;
+  actuator1.repetition = 20;
+  actuator1.latency = 20;
+  actuator[0] = actuator1;
+
+  aerogel_sensor_module(module_inst, module_inst->name, sensors, len_sensor_list,
+      ret_val, len_ret_val, actuator, len_actuator_list);
+}
+
 void
-test_wasm_runtime_native_print(void) {
+test_wasm_runtime_native_print(wasm_exec_env_t exec_env) {
   uint32* imu_data = wasm_runtime_malloc(sizeof(uint32)*3);
+  WASMModuleInstance *module_inst = (WASMModuleInstance*)exec_env->module_inst;
   get_imu_sensor(imu_data);
+  (void)&module_inst;
 
   uint32** image = wasm_runtime_malloc(sizeof(uint32*)*20);
   if(!image){

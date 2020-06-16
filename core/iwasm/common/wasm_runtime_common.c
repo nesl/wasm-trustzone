@@ -1074,8 +1074,12 @@ check_main_func_type(const WASMType *type)
     return true;
 }
 
-void test_call_wasm_runtime_native(void) {
-  test_wasm_runtime_native_print();
+void test_call_wasm_runtime_native(wasm_exec_env_t exec_env) {
+  test_wasm_runtime_native_print(exec_env);
+}
+
+void wasm_add_module_name(WASMModuleInstanceCommon *module_inst, char* name) {
+  wasm_add_index_from_name((WASMModuleInstance*) module_inst, name);
 }
 
 bool

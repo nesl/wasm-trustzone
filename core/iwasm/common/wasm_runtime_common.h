@@ -337,4 +337,3 @@ wasm_runtime_invoke_native_raw(WASMExecEnv *exec_env, void *func_ptr,
 #endif
 
 #endif /* end of _WASM_COMMON_H */
-

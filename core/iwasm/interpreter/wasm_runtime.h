@@ -207,6 +207,9 @@ typedef struct WASMModuleInstance {
 
     AccessControl *access_control;
 
+    //The name of the module
+    char* name;
+
     uint32 timestamp;
 
     // The below two are the metadata only. For debugging purposes.
@@ -345,11 +348,14 @@ wasm_call_indirect(WASMExecEnv *exec_env,
                    uint32_t argc, uint32_t argv[]);
 
 void
-test_wasm_runtime_native_print(void);
+test_wasm_runtime_native_print(wasm_exec_env_t exec_env);
 
 // RL: Check whether the memory has violated the used-defined access control rules
 bool
 check_memory_usage(WASMModuleInstance* module_inst);
+
+// add the index of the module from its name
+void wasm_add_index_from_name(WASMModuleInstance* module_inst, char* name);
 
 #ifdef __cplusplus
 }

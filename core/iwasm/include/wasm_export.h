@@ -341,6 +341,9 @@ bool
 wasm_application_execute_main(wasm_module_inst_t module_inst,
                               int32_t argc, char *argv[]);
 
+// Add the wasm module name and the index information.
+void wasm_add_module_name(wasm_module_inst_t module_inst, char* name);
+
 /**
  * Find the specified function in argv[0] from a WASM module instance
  * and execute that function.
@@ -628,7 +631,7 @@ wasm_runtime_get_user_data(wasm_exec_env_t exec_env);
  * Purely for testing purpose.
  */
 void
-test_call_wasm_runtime_native(void);
+test_call_wasm_runtime_native(wasm_exec_env_t exec_env);
 
 #ifdef __cplusplus
 }
