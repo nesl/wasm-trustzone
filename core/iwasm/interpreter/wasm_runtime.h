@@ -25,6 +25,7 @@ typedef struct aerogel_val {
   char *sensor_name;
   uint32** value;
   uint32 len_value;
+  uint32* num_ret_val;
 } aerogel_val;
 
 typedef struct aerogel_actuator {

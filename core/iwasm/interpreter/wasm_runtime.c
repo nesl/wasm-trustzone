@@ -27,7 +27,7 @@ mcu,power:1\n\
 
 char* module_spec =
 "\
-name:regular1,device:imu-10000.motion-9000.speaker-20000.propeller-5000,mcu:9000,memory:200000\n\
+name:regular1,device:imu-10000.motion-9000.speaker-20000.propeller-5000,mcu:1000000,memory:200000\n\
 name:regular2,device:camera-10000.speaker-30000,mcu:9000,memory:200000\n\
 name:regular3,device:camera-10000.microphone-5000,mcu:9000,memory:200000\n\
 name:max_concurrent1,device:camera-10000,mcu:9000,memory:200000\n\
@@ -681,7 +681,7 @@ init_sensor_access(void)
       }
 
       temp += strlen("concurrent_access:");
-      sensor_actuator_concurrent_access[k++] = atoi((const char*)temp);
+      sensor_actuator_concurrent_access[k++] = 0;
       memset(tmp, 0, 150);
     }
     else {
@@ -1668,7 +1668,7 @@ bool check_access_name(char* module_name,
   char* tmp = module_spec;
   if(!strstr(module_spec, module_name)) {
     printf("Name not found. No access to any sensors.\n");
-    return false;
+    return true;
   }
   char access_string[200];
   int j = 0;
@@ -1677,9 +1677,9 @@ bool check_access_name(char* module_name,
     ++tmp;
   }
   if(strstr(access_string, sensor_name)){
-    return true;
+    return false;
   }
-  else return false;
+  else return true;
 }
 
 bool check_access_concurrency(char* sensor_name, uint32 max_concurrent)
@@ -1688,7 +1688,9 @@ bool check_access_concurrency(char* sensor_name, uint32 max_concurrent)
   for(; i < sensor_index_mapping_len; i++){
     if(strstr(sensor_index_mapping[i], sensor_name))
     {
+      // printf("first: %u, second: %u\n", sensor_actuator_concurrent_access[i], max_concurrent);
       if(sensor_actuator_concurrent_access[i] < max_concurrent){
+        // printf("i: %d, access: %u\n",i, sensor_actuator_concurrent_access[i]);
         sensor_actuator_concurrent_access[i]++;
         return false;
       }
@@ -1756,21 +1758,39 @@ void aerogel_sensor_module(WASMModuleInstance* module_inst,
     char* name = actuator_list[i].actuator_name;
     char* tmp = device_spec;
     tmp = strstr(tmp, name);
-    tmp = strstr(tmp, "concurrent_access");
-    tmp += strlen("concurrent_access");
+    tmp = strstr(tmp, "concurrent_access:");
+    tmp += strlen("concurrent_access:");
     char temp[20];
+    memset(temp, 0, 20);
     int j = 0;
     while(tmp[j] != '\n'){
       temp[j] = tmp[j];
       ++j;
     }
     uint32 max_access = (uint32)atoi(temp);
+    // printf("module_name is: %s, name is: %s\n", module_name, name);
+    // printf("check_access_name: %d\n", check_access_name(module_name, name));
+    // printf("check_access_energy: %d\n", check_access_energy(module_inst, name));
+    // printf("check_access_concurrency: %d\n", check_access_concurrency(name, max_access));
 
-    if(check_access_name(module_name, name) ||
-       check_access_energy(module_inst, name) ||
-       check_access_concurrency(name, max_access))
-    {
-      printf("Actuator access failed. Need further debugging.\n");
+    // if(check_access_name(module_name, name) ||
+    //    check_access_energy(module_inst, name) ||
+    //    check_access_concurrency(name, max_access))
+    // {
+    //   printf("Actuator access failed. Need further debugging.\n");
+    //   continue;
+    // }
+
+    if(check_access_name(module_name, name)){
+      printf("Actuator %s access failed. Not allowed for module %s.\n", name, module_name);
+      continue;
+    }
+    else if (check_access_energy(module_inst, name)) {
+      printf("Actuator %s energy exceeds.\n", name);
+      continue;
+    }
+    else if (check_access_concurrency(name, max_access)) {
+      printf("Actuator %s max concurrent access achieved.\n", name);
       continue;
     }
 
@@ -1794,14 +1814,13 @@ void aerogel_sensor_module(WASMModuleInstance* module_inst,
     }
   }
 
+  // printf("len_sensor_list: %u\n", len_sensor_list);
   for(uint32 i = 0 ; i < len_sensor_list; i++){
-    uint32 i = 0;
-
     char* name = sensor_list[i].sensor_name;
     char* tmp = device_spec;
     tmp = strstr(tmp, name);
-    tmp = strstr(tmp, "concurrent_access");
-    tmp += strlen("concurrent_access");
+    tmp = strstr(tmp, "concurrent_access:");
+    tmp += strlen("concurrent_access:");
     char temp[20];
     int j = 0;
     while(tmp[j] != '\n'){
@@ -1809,12 +1828,18 @@ void aerogel_sensor_module(WASMModuleInstance* module_inst,
       ++j;
     }
     uint32 max_access = (uint32)atoi(temp);
+    // printf("arrived here.\n");
 
-    if(check_access_name(module_name, name) ||
-       check_access_energy(module_inst, name) ||
-       check_access_concurrency(name, max_access))
-    {
-      printf("Sensor access failed. Need further debugging.\n");
+    if(check_access_name(module_name, name)){
+      printf("Sensor %s access failed. Not allowed for module %s.\n", name, module_name);
+      continue;
+    }
+    else if (check_access_energy(module_inst, name)) {
+      printf("Sensor %s energy exceeds.\n", name);
+      continue;
+    }
+    else if (check_access_concurrency(name, max_access)) {
+      printf("Sensor %s max concurrent access achieved.\n", name);
       continue;
     }
 
@@ -1824,22 +1849,28 @@ void aerogel_sensor_module(WASMModuleInstance* module_inst,
     uint32 repetition = sensor_list[i].duration / (1000000/freq);
     ret_val[i].sensor_name = name;
     ret_val[i].value = wasm_runtime_malloc(sizeof(uint32) * repetition);
+    ret_val[i].len_value = repetition;
+    ret_val[i].num_ret_val = wasm_runtime_malloc(sizeof(uint32) * repetition);
 
     for(uint32 k = 0 ; k < repetition; k++){
       if(!strcmp(name, "imu")) {
         ret_val[i].value[k] = wasm_runtime_malloc(sizeof(uint32) * 3);
+        ret_val[i].num_ret_val[k] = 3;
         get_imu((ret_val[i].value[k]), freq);
       }
       else if(!strcmp(name, "camera")) {
         ret_val[i].value[k] = wasm_runtime_malloc(sizeof(uint32) * 100);
+        ret_val[i].num_ret_val[k] = 100;
         get_camera((ret_val[i].value[k]), freq);
       }
       else if(!strcmp(name, "motion")) {
         ret_val[i].value[k] = wasm_runtime_malloc(sizeof(uint32) * 1);
+        ret_val[i].num_ret_val[k] = 1;
         get_motion((ret_val[i].value[k]), freq);
       }
       else if(!strcmp(name, "microphone")) {
         ret_val[i].value[k] = wasm_runtime_malloc(sizeof(uint32) * 10);
+        ret_val[i].num_ret_val[k] = 10;
         get_microphone((ret_val[i].value[k]), freq);
       }
       else {
@@ -1850,23 +1881,44 @@ void aerogel_sensor_module(WASMModuleInstance* module_inst,
   }
 }
 
+void test_print_returned_sensor_val(aerogel_val* ret_val, uint32 len_ret_val) {
+  for(uint32 i = 0; i < len_ret_val; i++) {
+    aerogel_val val = ret_val[i];
+    if(!val.sensor_name) {
+      continue;
+    }
+    printf("Sensor name: %s\n", val.sensor_name);
+    for(uint32 j = 0; j < val.len_value; j++) {
+      printf("Round %u: ", j+1);
+      for(uint32 k = 0; k < val.num_ret_val[j]; k++){
+        printf("%u\t", val.value[j][k]);
+      }
+      printf("\n");
+    }
+    printf("\n");
+  }
+}
+
 void test_aerogel_sensor_module(WASMModuleInstance *module_inst)
 {
   aerogel_sensor sensor1;
   sensor1.sensor_name = "imu";
-  sensor1.freq = 60;
+  sensor1.freq = 80;
   sensor1.duration = 100000;
 
   aerogel_sensor sensor2;
   sensor2.sensor_name = "motion";
-  sensor2.freq = 10;
+  sensor2.freq = 100;
   sensor2.duration = 100000;
 
-  aerogel_sensor* sensors = wasm_runtime_malloc(sizeof(aerogel_sensor) * 2);
+  aerogel_sensor* sensors = wasm_runtime_malloc(sizeof(aerogel_sensor) * 70);
+  sensors[0] = sensor1;
+  sensors[1] = sensor2;
   uint32 len_sensor_list = 2;
 
   aerogel_val* ret_val = wasm_runtime_malloc(sizeof(aerogel_val) * 2);
   uint32 len_ret_val = 2;
+  memset(ret_val, 0, sizeof(aerogel_val) * 2);
 
   aerogel_actuator* actuator = wasm_runtime_malloc(sizeof(aerogel_actuator) * 1);
   uint32 len_actuator_list = 1;
@@ -1881,6 +1933,8 @@ void test_aerogel_sensor_module(WASMModuleInstance *module_inst)
 
   aerogel_sensor_module(module_inst, module_inst->name, sensors, len_sensor_list,
       ret_val, len_ret_val, actuator, len_actuator_list);
+
+  test_print_returned_sensor_val(ret_val, len_ret_val);
 }
 
 void
@@ -1888,7 +1942,7 @@ test_wasm_runtime_native_print(wasm_exec_env_t exec_env) {
   uint32* imu_data = wasm_runtime_malloc(sizeof(uint32)*3);
   WASMModuleInstance *module_inst = (WASMModuleInstance*)exec_env->module_inst;
   get_imu_sensor(imu_data);
-  (void)&module_inst;
+  test_aerogel_sensor_module(module_inst);
 
   uint32** image = wasm_runtime_malloc(sizeof(uint32*)*20);
   if(!image){
