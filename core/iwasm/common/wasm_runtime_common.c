@@ -1074,6 +1074,34 @@ check_main_func_type(const WASMType *type)
     return true;
 }
 
+void aerogel_sensor(wasm_exec_env_t exec_env,
+  uint8* sensor_name_list, // Name with '\t' separation and '\0' end.
+  int len_sensor_name_list,
+  uint8** ret_list, // return value of each sensor
+  int len_ret_list)
+{
+  uint32 i = 0;
+  char* tmp = (char*) sensor_name_list;
+  while(*tmp) {
+    if(*tmp == '\t') ++i;
+    ++tmp;
+  }
+  aerogel_sensor* sensor_list = wasm_runtime_malloc((i+1) * sizeof(aerogel_sensor));
+  uint32 len_sensor_list = i+1;
+
+  aerogel_sensor_interaction_native(exec_env,
+    sensor_list, (uint32)len_sensor_list,
+    ret_val, (uint32)len_ret_val);
+}
+
+void aerogetl_actuator(wasm_exec_env_t exec_env,
+  uint8* actuator_name_list, // Name with '\t' separation and '\0' end
+  int len_actuator_name_list)
+{
+  aerogel_actuator_interaction_native(exec_env,
+    actuator_list, (uint32)len_actuator_list);
+}
+
 void test_call_wasm_runtime_native(wasm_exec_env_t exec_env) {
   test_wasm_runtime_native_print(exec_env);
 }

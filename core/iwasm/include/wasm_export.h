@@ -111,6 +111,41 @@ typedef struct RuntimeInitArgs {
     uint32_t n_native_symbols;
 } RuntimeInitArgs;
 
+// AeroGel related data structures.
+/* RL: AeroGel starts*/
+typedef struct aerogel_sensor {
+  char *sensor_name;
+  uint32 freq;
+  uint32 duration; //in usec
+} aerogel_sensor;
+
+typedef struct aerogel_val {
+  char *sensor_name;
+  uint32** value;
+  uint32 len_value;
+  uint32* num_ret_val;
+} aerogel_val;
+
+typedef struct aerogel_actuator {
+  char *actuator_name;
+  uint32* val;
+  uint32 len_val;
+  uint32 repetition;
+  uint32 latency;
+} aerogel_actuator;
+
+void aerogetl_actuator(wasm_exec_env_t exec_env,
+  uint8* actuator_name_list,
+  int len_actuator_name_list);
+
+void aerogel_sensor(wasm_exec_env_t exec_env,
+  uint8* sensor_name_list,
+  int len_sensor_name_list,
+  uint8** ret_list,
+  int len_ret_list);
+
+/* RL: AeroGel data structure ends. */
+
 /**
  * Initialize the WASM runtime environment, and also initialize
  * the memory allocator with system allocator, which calls os_malloc

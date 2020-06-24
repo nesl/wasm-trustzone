@@ -1938,6 +1938,39 @@ void test_aerogel_sensor_module(WASMModuleInstance *module_inst)
 }
 
 void
+aerogel_sensor_interaction_native(
+  wasm_exec_env_t exec_env,
+  aerogel_sensor* sensor_list,
+  uint32 len_sensor_list,
+  aerogel_val* ret_val,
+  uint32 len_ret_val)
+{
+  WASMModuleInstance *module_inst = (WASMModuleInstance*)exec_env->module_inst;
+  aerogel_sensor_module(module_inst,
+      module_inst->name, sensor_list, len_sensor_list,
+      ret_val, len_ret_val,
+      NULL, // Actuator list
+      0 // Length of actuator list
+  );
+}
+
+void aerogel_actuator_interaction_native(
+  wasm_exec_env_t exec_env,
+  aerogel_actuator* actuator_list,
+  uint32 len_actuator_list)
+{
+  WASMModuleInstance *module_inst = (WASMModuleInstance*)exec_env->module_inst;
+  aerogel_sensor_module(module_inst,
+      module_inst->name, //module name
+      NULL, // Sensor list
+      0, // Length of sensor list
+      NULL, // Return value list
+      0, // Length of return value list
+      actuator_list,
+      len_actuator_list);
+}
+
+void
 test_wasm_runtime_native_print(wasm_exec_env_t exec_env) {
   uint32* imu_data = wasm_runtime_malloc(sizeof(uint32)*3);
   WASMModuleInstance *module_inst = (WASMModuleInstance*)exec_env->module_inst;
