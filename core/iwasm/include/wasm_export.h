@@ -113,35 +113,27 @@ typedef struct RuntimeInitArgs {
 
 // AeroGel related data structures.
 /* RL: AeroGel starts*/
-typedef struct aerogel_sensor {
-  char *sensor_name;
-  uint32 freq;
-  uint32 duration; //in usec
-} aerogel_sensor;
+void aerogetl_actuator_native(wasm_exec_env_t exec_env,
+  uint8* actuator_name_list, // Name with '\t' separation and '\0' end
+  int len_actuator_name_list,
+  uint8* val_list,
+  int len_val_list,
+  uint8* len_val,
+  int len_len_val,
+  uint8* repetition,
+  int len_repetition,
+  uint8* latency,
+  int len_latency);
 
-typedef struct aerogel_val {
-  char *sensor_name;
-  uint32** value;
-  uint32 len_value;
-  uint32* num_ret_val;
-} aerogel_val;
-
-typedef struct aerogel_actuator {
-  char *actuator_name;
-  uint32* val;
-  uint32 len_val;
-  uint32 repetition;
-  uint32 latency;
-} aerogel_actuator;
-
-void aerogetl_actuator(wasm_exec_env_t exec_env,
-  uint8* actuator_name_list,
-  int len_actuator_name_list);
-
-void aerogel_sensor(wasm_exec_env_t exec_env,
-  uint8* sensor_name_list,
+// sensor part.
+void aerogel_sensor_native(wasm_exec_env_t exec_env,
+  uint8* sensor_name_list, // Name with '\t' separation and '\0' end.
   int len_sensor_name_list,
-  uint8** ret_list,
+  uint8* frequency, // This nneds to be cast to uint32
+  int len_frequency,
+  uint8* duration, // This needs to be cast to uint32
+  int len_duration,
+  uint8* ret_list, // return value of each sensor. Let's just flatten it.
   int len_ret_list);
 
 /* RL: AeroGel data structure ends. */

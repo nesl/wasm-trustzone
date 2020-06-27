@@ -21,6 +21,26 @@
 extern "C" {
 #endif
 
+typedef struct aerogel_sensor {
+  char *sensor_name;
+  uint32 freq;
+  uint32 duration; //in usec
+} aerogel_sensor;
+
+typedef struct aerogel_val {
+  char *sensor_name;
+  uint32** value;
+  uint32 len_value;
+  uint32* num_ret_val;
+} aerogel_val;
+
+typedef struct aerogel_actuator {
+  char *actuator_name;
+  uint32* val;
+  uint32 len_val;
+  uint32 repetition;
+  uint32 latency;
+} aerogel_actuator;
 
 typedef struct WASMModuleCommon {
     /* Module type, for module loaded from WASM bytecode binary,

@@ -15,27 +15,6 @@
 extern "C" {
 #endif
 
-typedef struct aerogel_sensor {
-  char *sensor_name;
-  uint32 freq;
-  uint32 duration; //in usec
-} aerogel_sensor;
-
-typedef struct aerogel_val {
-  char *sensor_name;
-  uint32** value;
-  uint32 len_value;
-  uint32* num_ret_val;
-} aerogel_val;
-
-typedef struct aerogel_actuator {
-  char *actuator_name;
-  uint32* val;
-  uint32 len_val;
-  uint32 repetition;
-  uint32 latency;
-} aerogel_actuator;
-
 typedef struct WASMMemoryInstance {
     /* Number bytes per page */
     uint32 num_bytes_per_page;
@@ -350,6 +329,19 @@ wasm_call_indirect(WASMExecEnv *exec_env,
 
 void
 test_wasm_runtime_native_print(wasm_exec_env_t exec_env);
+
+void
+aerogel_sensor_interaction_native(
+  wasm_exec_env_t exec_env,
+  aerogel_sensor* sensor_list,
+  uint32 len_sensor_list,
+  aerogel_val* ret_val,
+  uint32 len_ret_val);
+
+void aerogel_actuator_interaction_native(
+  wasm_exec_env_t exec_env,
+  aerogel_actuator* actuator_list,
+  uint32 len_actuator_list);
 
 // RL: Check whether the memory has violated the used-defined access control rules
 bool

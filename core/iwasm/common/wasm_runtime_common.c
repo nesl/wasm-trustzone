@@ -1074,10 +1074,26 @@ check_main_func_type(const WASMType *type)
     return true;
 }
 
-void aerogel_sensor(wasm_exec_env_t exec_env,
+void aerogel_flatten_ret_val(aerogel_val* ret_val, uint32 len_ret_val, uint8* ret_list) {
+  for(uint32 i = 0; i < len_ret_val; i++) {
+    aerogel_val val = ret_val[i];
+    for(int j = 0; j < val.len_value; j++) {
+      for(int k = 0; k < val.num_ret_val[j]; k++) {
+        ((uint32*)ret_list)[0] = val.value[j][k];
+        ret_list += sizeof(uint32);
+      }
+    }
+  }
+}
+
+void aerogel_sensor_native(wasm_exec_env_t exec_env,
   uint8* sensor_name_list, // Name with '\t' separation and '\0' end.
   int len_sensor_name_list,
-  uint8** ret_list, // return value of each sensor
+  uint8* frequency, // This nneds to be cast to uint32
+  int len_frequency,
+  uint8* duration, // This needs to be cast to uint32
+  int len_duration,
+  uint8* ret_list, // return value of each sensor. Let's just flatten it.
   int len_ret_list)
 {
   uint32 i = 0;
@@ -1089,17 +1105,81 @@ void aerogel_sensor(wasm_exec_env_t exec_env,
   aerogel_sensor* sensor_list = wasm_runtime_malloc((i+1) * sizeof(aerogel_sensor));
   uint32 len_sensor_list = i+1;
 
+  char *temp = (char*) sensor_name_list;
+  for(i = 0; i < len_sensor_list; i++) {
+    char sensor_name[20];
+    memset(sensor_name, 0, 20);
+    int j = 0;
+    while(1) {
+      if(*temp == '\t' || *temp == '\0') {
+        ++temp;
+        break;
+      }
+      sensor_name[j++] = *temp;
+      ++temp;
+    }
+    sensor_list[i].sensor_name = sensor_name;
+    sensor_list[i].freq = ((uint32*)frequency)[i];
+    sensor_list[i].duration = ((uint32*)frequency)[i];
+  }
+
+  aerogel_val* ret_val = wasm_runtime_malloc(sizeof(aerogel_val) * len_sensor_list);
   aerogel_sensor_interaction_native(exec_env,
-    sensor_list, (uint32)len_sensor_list,
-    ret_val, (uint32)len_ret_val);
+    sensor_list, len_sensor_list,
+    ret_val, len_sensor_list);
+
+  uint8* tmp_ret_list = ret_list;
+  aerogel_flatten_ret_val(ret_val, len_sensor_list, tmp_ret_list);
 }
 
-void aerogetl_actuator(wasm_exec_env_t exec_env,
+void aerogetl_actuator_native(wasm_exec_env_t exec_env,
   uint8* actuator_name_list, // Name with '\t' separation and '\0' end
-  int len_actuator_name_list)
+  int len_actuator_name_list,
+  uint8* val_list,
+  int len_val_list,
+  uint8* len_val,
+  int len_len_val,
+  uint8* repetition,
+  int len_repetition,
+  uint8* latency,
+  int len_latency)
 {
+  uint32 i = 0;
+  char* tmp = (char*) actuator_name_list;
+  while(*tmp) {
+    if(*tmp == '\t') ++i;
+    ++tmp;
+  }
+  aerogel_actuator* actuator_list = wasm_runtime_malloc((i+1) * sizeof(aerogel_actuator));
+  uint32 len_actuator_list = i+1;
+
+  char* tmp_val_list = (char*) val_list;
+
+  char *temp = (char*) actuator_name_list;
+  for(i = 0; i < len_actuator_list; i++) {
+    char actuator_name[20];
+    memset(actuator_name, 0, 20);
+    int j = 0;
+    while(1) {
+      if(*temp == '\t' || *temp == '\0') {
+        ++temp;
+        break;
+      }
+      actuator_name[j++] = *temp;
+      ++temp;
+    }
+    actuator_list[i].actuator_name = actuator_name;
+    actuator_list[i].val = wasm_runtime_malloc(sizeof(uint32) * len_val[i]);
+    for(int k = 0 ; k < len_val[i]; k++) {
+      actuator_list[i].val[k] = ((uint32*)tmp_val_list)[0];
+      tmp_val_list += sizeof(uint32);
+    }
+    actuator_list[i].len_val = (uint32)len_val[i];
+    actuator_list[i].repetition = ((uint32*)repetition)[i];
+    actuator_list[i].latency = ((uint32*)latency)[i];
+  }
   aerogel_actuator_interaction_native(exec_env,
-    actuator_list, (uint32)len_actuator_list);
+    actuator_list, len_actuator_list);
 }
 
 void test_call_wasm_runtime_native(wasm_exec_env_t exec_env) {
