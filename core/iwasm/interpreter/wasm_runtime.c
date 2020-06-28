@@ -27,8 +27,8 @@ mcu,power:1\n\
 
 char* module_spec =
 "\
-name:regular1,device:imu-10000.motion-9000.speaker-20000.propeller-5000,mcu:1000000,memory:200000\n\
-name:regular2,device:camera-10000.speaker-30000,mcu:9000,memory:200000\n\
+name:regular1,device:camera-10000.speaker-30000,mcu:9000,memory:200000\n\
+name:regular2,device:imu-10000.motion-9000.speaker-20000.propeller-5000.door_motor-100000,mcu:1000000,memory:200000\n\
 name:regular3,device:camera-10000.microphone-5000,mcu:9000,memory:200000\n\
 name:max_concurrent1,device:camera-10000,mcu:9000,memory:200000\n\
 name:max_concurrent2,device:microphone-10000,mcu:9000,memory:200000\n\
@@ -1666,7 +1666,7 @@ bool check_access_name(char* module_name,
     char* sensor_name)
 {
   char* tmp = module_spec;
-  if(!strstr(module_spec, module_name)) {
+  if(!(tmp = strstr(module_spec, module_name))) {
     printf("Name not found. No access to any sensors.\n");
     return true;
   }
@@ -1685,6 +1685,7 @@ bool check_access_name(char* module_name,
 bool check_access_concurrency(char* sensor_name, uint32 max_concurrent)
 {
   int i = 0;
+  // printf("name: %s\n", sensor_name);
   for(; i < sensor_index_mapping_len; i++){
     if(strstr(sensor_index_mapping[i], sensor_name))
     {
@@ -1753,8 +1754,6 @@ void aerogel_sensor_module(WASMModuleInstance* module_inst,
     uint32 len_actuator_list)
 {
   for(uint32 i = 0 ; i < len_actuator_list; i++){
-    uint32 i = 0;
-
     char* name = actuator_list[i].actuator_name;
     char* tmp = device_spec;
     tmp = strstr(tmp, name);
@@ -1780,7 +1779,7 @@ void aerogel_sensor_module(WASMModuleInstance* module_inst,
     //   printf("Actuator access failed. Need further debugging.\n");
     //   continue;
     // }
-
+    printf("actuator name: %s\n", name);
     if(check_access_name(module_name, name)){
       printf("Actuator %s access failed. Not allowed for module %s.\n", name, module_name);
       continue;
@@ -1960,6 +1959,10 @@ void aerogel_actuator_interaction_native(
   uint32 len_actuator_list)
 {
   WASMModuleInstance *module_inst = (WASMModuleInstance*)exec_env->module_inst;
+  // for(int i = 0 ; i < 3 ; i++) {
+  //   printf("actuator name in native: %s\n", actuator_list[i].actuator_name);
+  // }
+
   aerogel_sensor_module(module_inst,
       module_inst->name, //module name
       NULL, // Sensor list

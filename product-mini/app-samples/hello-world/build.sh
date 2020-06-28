@@ -11,5 +11,5 @@ WAMR_DIR=${PWD}/../../..
         -Wl,--export=main,\
         -Wl,--allow-undefined,\
         -Wl,--no-threads,--strip-all,--no-entry \
-        -nostdlib -o renju-cross-check.wasm renju-cross-check.c
+        -nostdlib -o renju-cross-check-actuator.wasm renju-cross-check.c
 #./jeffdump -o test_wasm.h -n wasm_test_file test.wasm
