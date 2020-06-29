@@ -28,7 +28,7 @@ mcu,power:1\n\
 char* module_spec =
 "\
 name:regular1,device:camera-10000.speaker-30000,mcu:9000,memory:200000\n\
-name:regular2,device:imu-10000.motion-9000.speaker-20000.propeller-5000.door_motor-100000,mcu:1000000,memory:200000\n\
+name:regular2,device:imu-10000.motion-9000.camera-100000.speaker-20000.propeller-5000.door_motor-100000,mcu:1000000,memory:200000\n\
 name:regular3,device:camera-10000.microphone-5000,mcu:9000,memory:200000\n\
 name:max_concurrent1,device:camera-10000,mcu:9000,memory:200000\n\
 name:max_concurrent2,device:microphone-10000,mcu:9000,memory:200000\n\

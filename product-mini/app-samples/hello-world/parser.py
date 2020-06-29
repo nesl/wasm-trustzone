@@ -1,4 +1,4 @@
-f = open("renju-cross-check-actuator.wasm","rb")
+f = open("renju-cross-check-sensor.wasm","rb")
 num_list = list(f.read())
 results = []
 
