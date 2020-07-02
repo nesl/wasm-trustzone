@@ -13,6 +13,7 @@
 #include "access_control_spec.h"
 #include "../include/access_control_global_variable.h"
 
+// Drone's first.
 char* device_spec =
 "\
 name:imu,id:0,address:0x90000000,power:10,concurrent_access:50\n\
@@ -22,14 +23,29 @@ name:microphone,id:3,address:0x8FFFFFEC,power:100,concurrent_access:3\n\
 name:speaker,id:4,address:0x8FFFFFE4,power:400,concurrent_access:1\n\
 name:door_motor,id:5,address:0x8FFFFFE0,power:300,concurrent_access:1\n\
 name:propeller,id:6,address:0x8FFFFFC0,power:350,concurrent_access:1\n\
+name:home_camera_control,id:7,address:0x8FFFFFC4,power:400,concurrent_access:1\n\
+name:home_camera_image,id:8,address:0x8FFFFFCC,power:500,concurrent_access:30\n\
+name:door_battery,id:9,address:0x8FFFFFC8,power:20,concurrent_access:30\n\
 mcu,power:1\n\
 ";
 
+//first 3 are for the tests
 char* module_spec =
 "\
 name:regular1,device:camera-10000.speaker-30000,mcu:9000,memory:200000\n\
 name:regular2,device:imu-10000.motion-9000.camera-100000.speaker-20000.propeller-5000.door_motor-100000,mcu:1000000,memory:200000\n\
 name:regular3,device:camera-10000.microphone-5000,mcu:9000,memory:200000\n\
+name:regular_uav1,device:imu-10000.camera-10000.propeller-10000,mcu:100000,memory:200000\n\
+name:regular_uav2,device:imu-10000.camera-10000,mcu:100000,memory:200000\n\
+name:regular_smarthome1,device:microphone-10000.speaker-10000.door_battery-10000.home_camera_image-50000,mcu:100000,memory:200000\n\
+name:regular_smarthome2,device:motion-100000.home_camera_image-50000.home_camera_control-50000.door_motor-50000,mcu:100000,memory:200000\n\
+name:shortage_camera_power,device:home_camera_image-50,mcu:100000,memory:200000\n\
+name:shortage_memory_usage,device:imu-10000.camera-10000,mcu:100000,memory:20\n\
+name:shortage_mcu_power,device:microphone-10000,mcu:10,memory:200000\n\
+name:init_access_denial,device:camera-10000.speaker-30000,mcu:9000,memory:200000\n\
+name:max_concurrent_access,device:camera-10000.propeller-10000,mcu:100000,memory:200000\n\
+";
+/*
 name:max_concurrent1,device:camera-10000,mcu:9000,memory:200000\n\
 name:max_concurrent2,device:microphone-10000,mcu:9000,memory:200000\n\
 name:max_concurrent3,device:microphone-10000.door_motor-10000,mcu:9000,memory:500000\n\
@@ -38,12 +54,15 @@ name:low_pow,device:imu-500.camera-1000.door_motor-900,mcu:5000,memory:300000\n\
 name:low_mcu,device:imu-10000,mcu:200,memory:500000\n\
 name:low_memory,device:imu-10000,mcu:10000,memory:10\n\
 ";
+*/
 
 char* sensor_index_mapping[] = {"imu",
       "camera", "motion",
       "microphone", "speaker",
-      "door_motor", "propeller"};
-uint32 sensor_index_mapping_len = 7;
+      "door_motor", "propeller",
+      "home_camera_control", "home_camera_image",
+      "door_battery"};
+uint32 sensor_index_mapping_len = 10;
 
 static void
 set_error_buf(char *error_buf, uint32 error_buf_size, const char *string)
@@ -1583,6 +1602,10 @@ void get_imu_sensor(uint32* return_val) {
   return_val[2] = get_renju_rand() % 100;
 }
 
+void get_door_battery_percentage(uint32* return_val) {
+  return_val[0] = get_renju_rand() % 100;
+}
+
 // It returns 20*20 double array.
 void get_camera_data(uint32** image) {
   for(int i = 0 ; i < 10 ; i++) {
@@ -1625,10 +1648,24 @@ void set_propeller(uint32* state, uint32 latency){
   sleep_us(latency);
 }
 
+void set_home_camera_control(uint32* state, uint32 latency){
+
+  // angle
+  (void) &state;
+  sleep_us(latency);
+}
+
 void get_imu(uint32* data, uint32 freq)
 {
   uint32 latency = 1000000/freq;
   get_imu_sensor(data);
+  sleep_us(latency);
+}
+
+void get_door_battery(uint32* data, uint32 freq)
+{
+  uint32 latency = 1000000/freq;
+  get_door_battery_percentage(data);
   sleep_us(latency);
 }
 
@@ -1806,6 +1843,9 @@ void aerogel_sensor_module(WASMModuleInstance* module_inst,
       else if (!strcmp(name, "propeller")) {
         set_propeller(actuator_list[i].val, latency);
       }
+      else if (!strcmp(name, "home_camera_control")) {
+        set_home_camera_control(actuator_list[i].val, latency);
+      }
       else {
         printf("Error! Unknown actuator with name: %s\n", name);
         continue;
@@ -1857,7 +1897,12 @@ void aerogel_sensor_module(WASMModuleInstance* module_inst,
         ret_val[i].num_ret_val[k] = 3;
         get_imu((ret_val[i].value[k]), freq);
       }
-      else if(!strcmp(name, "camera")) {
+      else if(!strcmp(name, "door_battery")) {
+        ret_val[i].value[k] = wasm_runtime_malloc(sizeof(uint32) * 1);
+        ret_val[i].num_ret_val[k] = 1;
+        get_door_battery((ret_val[i].value[k]), freq);
+      }
+      else if(!strcmp(name, "camera") || !strcmp(name, "home_camera_image")) {
         ret_val[i].value[k] = wasm_runtime_malloc(sizeof(uint32) * 100);
         ret_val[i].num_ret_val[k] = 100;
         get_camera((ret_val[i].value[k]), freq);

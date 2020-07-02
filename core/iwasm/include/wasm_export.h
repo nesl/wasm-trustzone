@@ -113,7 +113,7 @@ typedef struct RuntimeInitArgs {
 
 // AeroGel related data structures.
 /* RL: AeroGel starts*/
-void aerogetl_actuator_native(wasm_exec_env_t exec_env,
+void aerogel_actuator_native(wasm_exec_env_t exec_env,
   uint8* actuator_name_list, // Name with '\t' separation and '\0' end
   int len_actuator_name_list,
   uint8* val_list,

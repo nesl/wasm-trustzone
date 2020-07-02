@@ -1132,7 +1132,7 @@ void aerogel_sensor_native(wasm_exec_env_t exec_env,
   aerogel_flatten_ret_val(ret_val, len_sensor_list, tmp_ret_list);
 }
 
-void aerogetl_actuator_native(wasm_exec_env_t exec_env,
+void aerogel_actuator_native(wasm_exec_env_t exec_env,
   uint8* actuator_name_list, // Name with '\t' separation and '\0' end
   int len_actuator_name_list,
   uint8* val_list,
