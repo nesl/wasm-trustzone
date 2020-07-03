@@ -32,25 +32,25 @@ mcu,power:1\n\
 //first 3 are for the tests
 char* module_spec =
 "\
-name:regular1,device:camera-10000.speaker-30000,mcu:9000,memory:200000\n\
-name:regular2,device:imu-10000.motion-9000.camera-100000.speaker-20000.propeller-5000.door_motor-100000,mcu:1000000,memory:200000\n\
-name:regular3,device:camera-10000.microphone-5000,mcu:9000,memory:200000\n\
-name:regular_uav1,device:imu-10000.camera-10000.propeller-10000,mcu:100000,memory:200000\n\
-name:regular_uav2,device:imu-10000.camera-10000,mcu:100000,memory:200000\n\
+name:regular1,device:camera-1000000.speaker-30000,mcu:9000,memory:200000\n\
+name:regular2,device:imu-10000.motion-9000.camera-10000000.speaker-20000.propeller-5000.door_motor-100000,mcu:1000000,memory:200000\n\
+name:regular3,device:camera-1000000.microphone-5000,mcu:9000,memory:200000\n\
+name:regular_uav1,device:imu-10000.camera-1000000.propeller-10000,mcu:100000,memory:200000\n\
+name:regular_uav2,device:imu-10000.camera-1000000,mcu:100000,memory:200000\n\
 name:regular_smarthome1,device:microphone-10000.speaker-10000.door_battery-10000.home_camera_image-50000,mcu:100000,memory:200000\n\
-name:regular_smarthome2,device:motion-100000.home_camera_image-50000.home_camera_control-50000.door_motor-50000,mcu:100000,memory:200000\n\
-name:shortage_camera_power,device:home_camera_image-50,mcu:100000,memory:200000\n\
-name:shortage_memory_usage,device:imu-10000.camera-10000,mcu:100000,memory:20\n\
-name:shortage_mcu_power,device:microphone-10000,mcu:10,memory:200000\n\
-name:init_access_denial,device:camera-10000.speaker-30000,mcu:9000,memory:200000\n\
-name:max_concurrent_access,device:camera-10000.propeller-10000,mcu:100000,memory:200000\n\
+name:regular_smarthome2,device:motion-100000.home_camera_image-50000.home_camera_control-50000.door_motor-50000,mcu:1000000,memory:200000\n\
+name:shortage_camera,device:home_camera_image-1500,mcu:100000,memory:200000\n\
+name:shortage_memory,device:imu-10000.camera-1000000,mcu:100000,memory:1\n\
+name:shortage_mcu,device:microphone-10000,mcu:100,memory:200000\n\
+name:init_access_denial,device:camera-1000000.speaker-30000,mcu:9000,memory:200000\n\
+name:max_con_access,device:camera-1000000.propeller-10000,mcu:100000,memory:200000\n\
 ";
 /*
-name:max_concurrent1,device:camera-10000,mcu:9000,memory:200000\n\
+name:max_concurrent1,device:camera-1000000,mcu:9000,memory:200000\n\
 name:max_concurrent2,device:microphone-10000,mcu:9000,memory:200000\n\
 name:max_concurrent3,device:microphone-10000.door_motor-10000,mcu:9000,memory:500000\n\
 name:max_concurrent4,device:microphone-10000.propeller-10000,mcu:9000,memory:500000\n\
-name:low_pow,device:imu-500.camera-1000.door_motor-900,mcu:5000,memory:300000\n\
+name:low_pow,device:imu-500.camera-100000.door_motor-900,mcu:5000,memory:300000\n\
 name:low_mcu,device:imu-10000,mcu:200,memory:500000\n\
 name:low_memory,device:imu-10000,mcu:10000,memory:10\n\
 ";
@@ -813,7 +813,7 @@ parse_sensor_actuator_info_list(char* list)
 AccessControlModule**
 parse_access_control_module(void)
 {
-  AccessControlModule** access_control_module_list = wasm_runtime_malloc(sizeof(AccessControlModule*) * 8);
+  AccessControlModule** access_control_module_list = wasm_runtime_malloc(sizeof(AccessControlModule*) * 11);
   char* tmp = module_spec;
   int j = 0;
   while((tmp = strstr(tmp, "name:"))){
@@ -875,7 +875,9 @@ parse_access_control_module(void)
       memory_consumption[i] = tmp[i];
     }
     access_control_module->memory_consumption = atoi(memory_consumption);
-    access_control_module_list[j++] = access_control_module;
+    access_control_module_list[j] = access_control_module;
+    // printf("Name: %s\n", access_control_module_list[0]->name);
+    ++j;
   }
   return access_control_module_list;
 }
@@ -964,6 +966,7 @@ check_memory_usage(WASMModuleInstance* module_inst)
   uint32 module_index = module_inst->access_control->module_index;
   module_inst->memory_usage_bytes = total_memory;
   uint32 specified_memory = module_inst->access_control->module_info[module_index]->memory_consumption;
+  // printf("module name: %s, module index: %u, memory usage: %u, specified_memory: %u\n", module_inst->name, module_index, module_inst->memory_usage_bytes, specified_memory);
   return module_inst->memory_usage_bytes <= specified_memory;
 }
 
@@ -985,6 +988,13 @@ void wasm_add_index_from_name(WASMModuleInstance* module_inst, char* name)
   module_inst->access_control->module_index = module_index;
   module_inst->name = wasm_runtime_malloc(strlen(name) + 1);
   strcpy(module_inst->name, name);
+
+  // if (!check_memory_usage(module_inst)) {
+  //   set_error_buf(error_buf, error_buf_size,
+  //                 "Memory usage exceeds.");
+  //   wasm_deinstantiate(module_inst);
+  //   return NULL;
+  // }
   // printf("Calling here name: %s, index: %u\n", module_inst->name, module_inst->access_control->module_index);
 }
 
@@ -1076,12 +1086,12 @@ wasm_instantiate(WASMModule *module,
     }
 
     // Make sure the memory has not violated the rule.
-    if (!check_memory_usage(module_inst)) {
-      set_error_buf(error_buf, error_buf_size,
-                    "Memory usage exceeds.");
-      wasm_deinstantiate(module_inst);
-      return NULL;
-    }
+    // if (!check_memory_usage(module_inst)) {
+    //   set_error_buf(error_buf, error_buf_size,
+    //                 "Memory usage exceeds.");
+    //   wasm_deinstantiate(module_inst);
+    //   return NULL;
+    // }
 
     if (module_inst->memory_count || global_count > 0) {
         WASMMemoryInstance *memory;
@@ -1628,18 +1638,21 @@ void get_microphone_data(uint32* mic_data) {
 
 void set_speaker_data(uint32* speaker_data, uint32 latency)
 {
+  printf("Setting speaker\n");
   //output the speaker data to the device through driver.
   (void) &speaker_data;
   sleep_us(latency);
 }
 
 void set_door_motor(uint32* state, uint32 latency){
+  printf("Setting door motor.\n");
   //output to the door motor.
   (void) &state;
   sleep_us(latency);
 }
 
 void set_propeller(uint32* state, uint32 latency){
+  printf("Setting propeller.\n");
   // 4 propellers.
   (void)&(state[0]);
   (void)&(state[1]);
@@ -1649,7 +1662,7 @@ void set_propeller(uint32* state, uint32 latency){
 }
 
 void set_home_camera_control(uint32* state, uint32 latency){
-
+  printf("Setting home camera control\n");
   // angle
   (void) &state;
   sleep_us(latency);
@@ -1657,6 +1670,7 @@ void set_home_camera_control(uint32* state, uint32 latency){
 
 void get_imu(uint32* data, uint32 freq)
 {
+  printf("Getting imu\n");
   uint32 latency = 1000000/freq;
   get_imu_sensor(data);
   sleep_us(latency);
@@ -1664,6 +1678,7 @@ void get_imu(uint32* data, uint32 freq)
 
 void get_door_battery(uint32* data, uint32 freq)
 {
+  printf("Getting door battery\n");
   uint32 latency = 1000000/freq;
   get_door_battery_percentage(data);
   sleep_us(latency);
@@ -1671,22 +1686,28 @@ void get_door_battery(uint32* data, uint32 freq)
 
 void get_camera(uint32* data, uint32 freq)
 {
+  // printf("Getting camera!\n");
   uint32 latency = 1000000/freq;
   uint32 **temp = wasm_runtime_malloc(sizeof(uint32*) * 10);
+  if(!temp) printf("Not enough temp\n");
   for(int i = 0; i < 10; i++){
     temp[i] = wasm_runtime_malloc(sizeof(uint32) * 10);
+    if(!temp[i]) printf("Not enough temp[i]\n");
   }
   get_camera_data(temp);
   for(int i = 0 ; i < 10;i++){
-    for(int j = 0;j < 10;j++){
-      data[i*10+j] = temp[i][j];
-    }
+    data[i] = temp[i][0];
   }
+  for(int i = 0; i < 10; i++){
+    wasm_runtime_free(temp[i]);
+  }
+  wasm_runtime_free(temp);
   sleep_us(latency);
 }
 
 void get_motion(uint32* data, uint32 freq)
 {
+  printf("Getting motion.\n");
   uint32 latency = 1000000/freq;
   get_motion_data(data);
   sleep_us(latency);
@@ -1694,6 +1715,7 @@ void get_motion(uint32* data, uint32 freq)
 
 void get_microphone(uint32* data, uint32 freq)
 {
+  printf("Getting microphone\n");
   uint32 latency = 1000000/freq;
   get_microphone_data(data);
   sleep_us(latency);
@@ -1773,6 +1795,7 @@ bool check_access_energy(WASMModuleInstance* module_inst, char* peripheral_name)
         sensor_info->used_power = 0;
         return true;
       }
+      // printf("returned false here.\n");
       return false;
     }
   }
@@ -1790,6 +1813,7 @@ void aerogel_sensor_module(WASMModuleInstance* module_inst,
     aerogel_actuator* actuator_list,
     uint32 len_actuator_list)
 {
+  // printf("Inside aerogel sensor module, module name: %s\n", module_inst->name);
   for(uint32 i = 0 ; i < len_actuator_list; i++){
     char* name = actuator_list[i].actuator_name;
     char* tmp = device_spec;
@@ -1816,13 +1840,9 @@ void aerogel_sensor_module(WASMModuleInstance* module_inst,
     //   printf("Actuator access failed. Need further debugging.\n");
     //   continue;
     // }
-    printf("actuator name: %s\n", name);
+    // printf("actuator name: %s\n", name);
     if(check_access_name(module_name, name)){
       printf("Actuator %s access failed. Not allowed for module %s.\n", name, module_name);
-      continue;
-    }
-    else if (check_access_energy(module_inst, name)) {
-      printf("Actuator %s energy exceeds.\n", name);
       continue;
     }
     else if (check_access_concurrency(name, max_access)) {
@@ -1834,6 +1854,10 @@ void aerogel_sensor_module(WASMModuleInstance* module_inst,
     uint32 latency = actuator_list[i].latency;
 
     for(uint32 k = 0 ; k < repetition; k++){
+      if (check_access_energy(module_inst, name)) {
+        printf("Actuator %s energy exceeds.\n", name);
+        continue;
+      }
       if (!strcmp(name, "speaker")) {
         set_speaker_data(actuator_list[i].val, latency);
       }
@@ -1890,8 +1914,15 @@ void aerogel_sensor_module(WASMModuleInstance* module_inst,
     ret_val[i].value = wasm_runtime_malloc(sizeof(uint32) * repetition);
     ret_val[i].len_value = repetition;
     ret_val[i].num_ret_val = wasm_runtime_malloc(sizeof(uint32) * repetition);
+    // repetition = repetition > 50 ? 50 : repetition;
 
     for(uint32 k = 0 ; k < repetition; k++){
+      if(check_access_energy(module_inst, name)) {
+        printf("%s denied - excessive energy.\n", name);
+        uint32 latency = 1000000/freq;
+        sleep_us(latency);
+        continue;
+      }
       if(!strcmp(name, "imu")) {
         ret_val[i].value[k] = wasm_runtime_malloc(sizeof(uint32) * 3);
         ret_val[i].num_ret_val[k] = 3;
@@ -1903,8 +1934,8 @@ void aerogel_sensor_module(WASMModuleInstance* module_inst,
         get_door_battery((ret_val[i].value[k]), freq);
       }
       else if(!strcmp(name, "camera") || !strcmp(name, "home_camera_image")) {
-        ret_val[i].value[k] = wasm_runtime_malloc(sizeof(uint32) * 100);
-        ret_val[i].num_ret_val[k] = 100;
+        ret_val[i].value[k] = wasm_runtime_malloc(sizeof(uint32) * 10);
+        ret_val[i].num_ret_val[k] = 10;
         get_camera((ret_val[i].value[k]), freq);
       }
       else if(!strcmp(name, "motion")) {

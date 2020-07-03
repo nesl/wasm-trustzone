@@ -1120,7 +1120,7 @@ void aerogel_sensor_native(wasm_exec_env_t exec_env,
     }
     sensor_list[i].sensor_name = sensor_name;
     sensor_list[i].freq = ((uint32*)frequency)[i];
-    sensor_list[i].duration = ((uint32*)frequency)[i];
+    sensor_list[i].duration = ((uint32*)duration)[i];
   }
 
   aerogel_val* ret_val = wasm_runtime_malloc(sizeof(aerogel_val) * len_sensor_list);
@@ -1211,6 +1211,12 @@ wasm_application_execute_main(WASMModuleInstanceCommon *module_inst,
     int32 argv_buf_offset, i;
     char *argv_buf, *p, *p_end;
     int32 *argv_offsets;
+
+    // RL: I don't care whatever mode. Make sure the memory hasn't exceeded yet.
+    if (!check_memory_usage((WASMModuleInstance*)module_inst)) {
+      wasm_runtime_set_exception(module_inst, "Memory usage exceeds.");
+      return false;
+    }
 
 #if WASM_ENABLE_LIBC_WASI != 0
     if (wasm_runtime_is_wasi_mode(module_inst)) {
