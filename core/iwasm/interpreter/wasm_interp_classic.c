@@ -802,15 +802,6 @@ wasm_interp_call_func_native(WASMModuleInstance *module_inst,
 
 #endif  /* end of WASM_ENABLE_LABELS_AS_VALUES */
 
-static bool
-check_cpu_consumption(WASMModuleInstance *module) {
-  uint32 module_index = module->access_control->module_index;
-  uint32 max_energy = module->access_control->module_info[module_index]->processor_power_consumption;
-  uint32 cpu_power = module->access_control->processor_power;
-  uint32 cpu_exe_time_us = module->native_execution_time_us + module->wasm_instructions_energy;
-  return cpu_power * cpu_exe_time_us > max_energy;
-}
-
 static void
 wasm_interp_call_func_bytecode(WASMModuleInstance *module,
                                WASMExecEnv *exec_env,

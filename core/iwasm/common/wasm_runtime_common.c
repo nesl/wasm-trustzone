@@ -9,6 +9,7 @@
 #include "bh_log.h"
 #include "wasm_runtime_common.h"
 #include "wasm_memory.h"
+#include "../interpreter/access_control_spec.h"
 #if WASM_ENABLE_INTERP != 0
 #include "../interpreter/wasm_runtime.h"
 #endif
@@ -1212,11 +1213,13 @@ wasm_application_execute_main(WASMModuleInstanceCommon *module_inst,
     char *argv_buf, *p, *p_end;
     int32 *argv_offsets;
 
+#if !EVAL_NO_AEROGEL
     // RL: I don't care whatever mode. Make sure the memory hasn't exceeded yet.
     if (!check_memory_usage((WASMModuleInstance*)module_inst)) {
       wasm_runtime_set_exception(module_inst, "Memory usage exceeds.");
       return false;
     }
+#endif
 
 #if WASM_ENABLE_LIBC_WASI != 0
     if (wasm_runtime_is_wasi_mode(module_inst)) {
@@ -2070,7 +2073,7 @@ wasm_runtime_invoke_native(WASMExecEnv *exec_env, void *func_ptr,
     argc1 = j;
     exec_env->attachment = attachment;
     // printf("Definitely come here.\n");
-    uint32 start = (uint32)bh_get_tick_us();
+    // uint32 start = (uint32)bh_get_tick_us();
     if (func_type->result_count == 0) {
         // printf("Void return.\n");
         invokeNative_Void(func_ptr, argv1, argc1);
@@ -2094,9 +2097,9 @@ wasm_runtime_invoke_native(WASMExecEnv *exec_env, void *func_ptr,
                 break;
         }
     }
-    uint32 end = (uint32)bh_get_tick_us();
-    WASMModuleInstance* tmp = (WASMModuleInstance*) module;
-    tmp->native_execution_time_us += (end - start);
+    // uint32 end = (uint32)bh_get_tick_us();
+    // WASMModuleInstance* tmp = (WASMModuleInstance*) module;
+    // tmp->native_execution_time_us += (end - start);
     exec_env->attachment = NULL;
 
     ret = true;

@@ -83,8 +83,10 @@ bool aerogel_check_peripheral_address(
   return true;
 }
 
+
 void *
 aerogel_wasm_safe_allocation(void *start_address, unsigned int size) {
+#if !EVAL_NO_AEROGEL
   // First get the poisonous addresses
   int total_address = 0;
   char* tmp = device_spec;
@@ -129,6 +131,9 @@ aerogel_wasm_safe_allocation(void *start_address, unsigned int size) {
     }
   }
   return NULL;
+#else
+  return wasm_runtime_realloc(start_address, size);
+#endif
 }
 
 static bool

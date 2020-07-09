@@ -347,6 +347,10 @@ void aerogel_actuator_interaction_native(
 bool
 check_memory_usage(WASMModuleInstance* module_inst);
 
+// RL: Check the mcu power consumption. I don't know why i used cpu here.
+bool
+check_cpu_consumption(WASMModuleInstance *module);
+
 // add the index of the module from its name
 void wasm_add_index_from_name(WASMModuleInstance* module_inst, char* name);
 

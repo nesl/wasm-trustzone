@@ -14,6 +14,7 @@
 #include "../include/access_control_global_variable.h"
 
 // Drone's first.
+#if !EVAL_NO_AEROGEL
 char* device_spec =
 "\
 name:imu,id:0,address:0x90000000,power:10,concurrent_access:50\n\
@@ -35,16 +36,17 @@ char* module_spec =
 name:regular1,device:camera-1000000.speaker-30000,mcu:9000,memory:200000\n\
 name:regular2,device:imu-10000.motion-9000.camera-10000000.speaker-20000.propeller-5000.door_motor-100000,mcu:1000000,memory:200000\n\
 name:regular3,device:camera-1000000.microphone-5000,mcu:9000,memory:200000\n\
-name:regular_uav1,device:imu-10000.camera-1000000.propeller-10000,mcu:100000,memory:200000\n\
-name:regular_uav2,device:imu-10000.camera-1000000,mcu:100000,memory:200000\n\
-name:regular_smarthome1,device:microphone-10000.speaker-10000.door_battery-10000.home_camera_image-50000,mcu:100000,memory:200000\n\
-name:regular_smarthome2,device:motion-100000.home_camera_image-50000.home_camera_control-50000.door_motor-50000,mcu:1000000,memory:200000\n\
-name:shortage_camera,device:home_camera_image-1500,mcu:100000,memory:200000\n\
-name:shortage_memory,device:imu-10000.camera-1000000,mcu:100000,memory:1\n\
-name:shortage_mcu,device:microphone-10000,mcu:100,memory:200000\n\
-name:init_access_denial,device:camera-1000000.speaker-30000,mcu:9000,memory:200000\n\
-name:max_con_access,device:camera-1000000.propeller-10000,mcu:100000,memory:200000\n\
+name:regular_uav1,device:imu-10000.camera-1000000.propeller-1000000,mcu:10000000,memory:200000\n\
+name:regular_uav2,device:imu-10000.camera-1000000,mcu:10000000,memory:200000\n\
+name:regular_smarthome1,device:microphone-100000.speaker-1000000.door_battery-10000.home_camera_image-50000,mcu:10000000,memory:200000\n\
+name:regular_smarthome2,device:motion-100000.home_camera_image-5000000.home_camera_control-5000000.door_motor-5000000,mcu:100000000,memory:200000\n\
+name:shortage_camera,device:home_camera_image-1500,mcu:10000000,memory:200000\n\
+name:shortage_memory,device:imu-10000.camera-1000000,mcu:10000000,memory:5000\n\
+name:shortage_mcu,device:microphone-1000000.door_battery-10000.home_camera_image-50000,mcu:5000,memory:200000\n\
+name:init_access_denial,device:camera-1000000.speaker-30000,mcu:10000000,memory:200000\n\
+name:max_con_access,device:camera-10000000.propeller-1000000,mcu:10000000,memory:200000\n\
 ";
+#endif
 /*
 name:max_concurrent1,device:camera-1000000,mcu:9000,memory:200000\n\
 name:max_concurrent2,device:microphone-10000,mcu:9000,memory:200000\n\
@@ -63,6 +65,15 @@ char* sensor_index_mapping[] = {"imu",
       "home_camera_control", "home_camera_image",
       "door_battery"};
 uint32 sensor_index_mapping_len = 10;
+
+uint32 check_peripheral_overhead = 0; // in us
+uint32 check_mcu_overhead = 0;
+uint32 check_memory_usage_overhead = 0;
+uint32 other_checking_overhead = 0;
+uint32 parsing_file_overhead = 0;
+
+int total_address = 0;
+uint32* addresses;
 
 static void
 set_error_buf(char *error_buf, uint32 error_buf_size, const char *string)
@@ -114,33 +125,25 @@ memories_deinstantiate(WASMMemoryInstance **memories, uint32 count)
 static bool
 check_illegal_memory_boundary(WASMMemoryInstance* memory)
 {
-  int total_address = 0;
-  char* tmp = device_spec;
-  for(int j = 0 ; j < strlen(device_spec) ; j++) {
-    if(device_spec[j] == '\n') ++total_address;
-  }
-  total_address -= 1;
+#if !EVAL_NO_AEROGEL
+  int start, end;
+  start = os_time_get_renju_boot_microsecond();
 
-  uint32 addresses[total_address];
-  tmp = device_spec;
-  int i = 0;
-
-  while((tmp = strstr(tmp, "address:"))){
-    tmp += 8;
-    char address[11];
-    memset(address, 0, 11);
-    strncpy(address, tmp, 10);
-    addresses[i++] = (uint32)strtoul(address, NULL, 16);
-  }
-
-  for(i = 0 ; i < total_address; i++){
+  for(int i = 0 ; i < total_address; i++){
     if((uint32)(&(*(memory->base_addr))) < addresses[i]
                 && (uint32)(&(*(memory->end_addr))) > addresses[i])
     {
+      end = os_time_get_renju_boot_microsecond();
+      check_memory_usage_overhead += (end - start);
       return false;
     }
   }
+  end = os_time_get_renju_boot_microsecond();
+  check_memory_usage_overhead += (end - start);
   return true;
+#else
+  return true;
+#endif
 }
 
 static WASMMemoryInstance*
@@ -674,6 +677,7 @@ execute_start_function(WASMModuleInstance *module_inst)
     return wasm_create_exec_env_and_call_function(module_inst, func, 0, NULL);
 }
 
+#if !EVAL_NO_AEROGEL
 /*
   Initialize the sensor state information.
 */
@@ -888,6 +892,8 @@ parse_access_control_module(void)
 AccessControl*
 parse_access_control_spec(void)
 {
+  int start, end;
+  start = os_time_get_renju_boot_microsecond();
   AccessControl* access_control = wasm_runtime_malloc(sizeof(AccessControl));
   memset(access_control, 0, sizeof(AccessControl));
 
@@ -917,6 +923,28 @@ parse_access_control_spec(void)
   }
 
   access_control->processor_power = atoi(mcu_power);
+
+  // Get memory info.
+  tmp = device_spec;
+  for(int j = 0 ; j < strlen(device_spec) ; j++) {
+    if(device_spec[j] == '\n') ++total_address;
+  }
+  total_address -= 1;
+
+  addresses = wasm_runtime_malloc(total_address * sizeof(uint32));
+  tmp = device_spec;
+  int i = 0;
+
+  while((tmp = strstr(tmp, "address:"))){
+    tmp += 8;
+    char address[11];
+    memset(address, 0, 11);
+    strncpy(address, tmp, 10);
+    addresses[i++] = (uint32)strtoul(address, NULL, 16);
+  }
+
+  end = os_time_get_renju_boot_microsecond();
+  parsing_file_overhead += (end - start);
   return access_control;
 }
 
@@ -944,11 +972,31 @@ void print_access_control(AccessControl* access_control) {
     printf("\n\n");
   }
 }
+#endif
+
+bool
+check_cpu_consumption(WASMModuleInstance *module) {
+#if !EVAL_NO_AEROGEL
+  int start, end;
+  start = os_time_get_renju_boot_microsecond();
+  uint32 module_index = module->access_control->module_index;
+  uint32 max_energy = module->access_control->module_info[module_index]->processor_power_consumption;
+  uint32 cpu_power = module->access_control->processor_power;
+  uint32 cpu_exe_time_us = module->native_execution_time_us + module->wasm_instructions_energy;
+  end = os_time_get_renju_boot_microsecond();
+  check_mcu_overhead += (end - start);
+  return cpu_power * cpu_exe_time_us > max_energy;
+#else
+  return false;
+#endif
+}
 
 // RL: Check whether the memory has violated the used-defined access control rules
-bool
-check_memory_usage(WASMModuleInstance* module_inst)
+bool check_memory_usage(WASMModuleInstance* module_inst)
 {
+#if !EVAL_NO_AEROGEL
+  int start, end;
+  start = os_time_get_renju_boot_microsecond();
   uint32 total_memory = 0;
   WASMMemoryInstance** memory_inst = module_inst -> memories;
   WASMTableInstance** table_inst = module_inst -> tables;
@@ -967,12 +1015,20 @@ check_memory_usage(WASMModuleInstance* module_inst)
   module_inst->memory_usage_bytes = total_memory;
   uint32 specified_memory = module_inst->access_control->module_info[module_index]->memory_consumption;
   // printf("module name: %s, module index: %u, memory usage: %u, specified_memory: %u\n", module_inst->name, module_index, module_inst->memory_usage_bytes, specified_memory);
+  end = os_time_get_renju_boot_microsecond();
+  check_memory_usage_overhead += (end - start);
+  // printf("check_memory_usage_overhead: %d\n", check_memory_usage_overhead);
+  // printf("parsing file: %d\n", parsing_file_overhead);
   return module_inst->memory_usage_bytes <= specified_memory;
+#else
+  return false;
+#endif
 }
 
 // add the index of the module from its name
 void wasm_add_index_from_name(WASMModuleInstance* module_inst, char* name)
 {
+#if !EVAL_NO_AEROGEL
   char* tmp = module_spec;
   char* start_tmp = module_spec; // at the start of module_spec, used to count '\n'
   uint32 module_index = 0;
@@ -988,7 +1044,7 @@ void wasm_add_index_from_name(WASMModuleInstance* module_inst, char* name)
   module_inst->access_control->module_index = module_index;
   module_inst->name = wasm_runtime_malloc(strlen(name) + 1);
   strcpy(module_inst->name, name);
-
+#endif
   // if (!check_memory_usage(module_inst)) {
   //   set_error_buf(error_buf, error_buf_size,
   //                 "Memory usage exceeds.");
@@ -1015,7 +1071,13 @@ wasm_instantiate(WASMModule *module,
     uint8 *global_data, *global_data_end;
     uint8 *memory_data;
     uint32 *table_data;
-    AccessControl* access_control;
+    AccessControl* access_control = NULL;
+
+    check_peripheral_overhead = 0; // in us
+    check_mcu_overhead = 0;
+    check_memory_usage_overhead = 0;
+    other_checking_overhead = 0;
+    parsing_file_overhead = 0;
 
     if (!module)
         return NULL;
@@ -1037,11 +1099,13 @@ wasm_instantiate(WASMModule *module,
                                         error_buf, error_buf_size)))
         return NULL;
     //(RENJU: Parse the spec sheet for the access control.)
+#if !EVAL_NO_AEROGEL
     if(!(access_control = parse_access_control_spec())){
       set_error_buf(error_buf, error_buf_size, "Access control parsing fail.");
       globals_deinstantiate(globals);
       return NULL;
     }
+#endif
 
     /* Allocate the memory */
     if (!(module_inst = wasm_runtime_malloc((uint32)sizeof(WASMModuleInstance)))) {
@@ -1325,6 +1389,12 @@ wasm_create_exec_env_and_call_function(WASMModuleInstance *module_inst,
 
     ret = wasm_call_function(exec_env, func, argc, argv);
     wasm_exec_env_destroy(exec_env);
+    printf("Peripheral overhead: %d (us)\n", check_peripheral_overhead);
+    printf("MCU overhead: %d (us)\n", check_mcu_overhead);
+    printf("Other checking overhead: %d (us)\n", other_checking_overhead + check_memory_usage_overhead);
+    printf("Parsing spec sheet overhead: %d (us)\n", parsing_file_overhead);
+    printf("%d\t%d\t%d\t%d", check_mcu_overhead, check_peripheral_overhead,
+        other_checking_overhead + check_memory_usage_overhead, parsing_file_overhead);
     return ret;
 }
 
@@ -1638,21 +1708,21 @@ void get_microphone_data(uint32* mic_data) {
 
 void set_speaker_data(uint32* speaker_data, uint32 latency)
 {
-  printf("Setting speaker\n");
+  // printf("Setting speaker\n");
   //output the speaker data to the device through driver.
   (void) &speaker_data;
   sleep_us(latency);
 }
 
 void set_door_motor(uint32* state, uint32 latency){
-  printf("Setting door motor.\n");
+  // printf("Setting door motor.\n");
   //output to the door motor.
   (void) &state;
   sleep_us(latency);
 }
 
 void set_propeller(uint32* state, uint32 latency){
-  printf("Setting propeller.\n");
+  // printf("Setting propeller.\n");
   // 4 propellers.
   (void)&(state[0]);
   (void)&(state[1]);
@@ -1662,7 +1732,7 @@ void set_propeller(uint32* state, uint32 latency){
 }
 
 void set_home_camera_control(uint32* state, uint32 latency){
-  printf("Setting home camera control\n");
+  // printf("Setting home camera control\n");
   // angle
   (void) &state;
   sleep_us(latency);
@@ -1670,7 +1740,7 @@ void set_home_camera_control(uint32* state, uint32 latency){
 
 void get_imu(uint32* data, uint32 freq)
 {
-  printf("Getting imu\n");
+  // printf("Getting imu\n");
   uint32 latency = 1000000/freq;
   get_imu_sensor(data);
   sleep_us(latency);
@@ -1678,7 +1748,7 @@ void get_imu(uint32* data, uint32 freq)
 
 void get_door_battery(uint32* data, uint32 freq)
 {
-  printf("Getting door battery\n");
+  // printf("Getting door battery\n");
   uint32 latency = 1000000/freq;
   get_door_battery_percentage(data);
   sleep_us(latency);
@@ -1707,7 +1777,7 @@ void get_camera(uint32* data, uint32 freq)
 
 void get_motion(uint32* data, uint32 freq)
 {
-  printf("Getting motion.\n");
+  // printf("Getting motion.\n");
   uint32 latency = 1000000/freq;
   get_motion_data(data);
   sleep_us(latency);
@@ -1715,7 +1785,7 @@ void get_motion(uint32* data, uint32 freq)
 
 void get_microphone(uint32* data, uint32 freq)
 {
-  printf("Getting microphone\n");
+  // printf("Getting microphone\n");
   uint32 latency = 1000000/freq;
   get_microphone_data(data);
   sleep_us(latency);
@@ -1724,9 +1794,14 @@ void get_microphone(uint32* data, uint32 freq)
 bool check_access_name(char* module_name,
     char* sensor_name)
 {
+#if !EVAL_NO_AEROGEL
+  int start, end;
+  start = os_time_get_renju_boot_microsecond();
   char* tmp = module_spec;
   if(!(tmp = strstr(module_spec, module_name))) {
     printf("Name not found. No access to any sensors.\n");
+    end = os_time_get_renju_boot_microsecond();
+    other_checking_overhead += (end - start);
     return true;
   }
   char access_string[200];
@@ -1736,13 +1811,25 @@ bool check_access_name(char* module_name,
     ++tmp;
   }
   if(strstr(access_string, sensor_name)){
+    end = os_time_get_renju_boot_microsecond();
+    other_checking_overhead += (end - start);
     return false;
   }
-  else return true;
+  else {
+    end = os_time_get_renju_boot_microsecond();
+    other_checking_overhead += (end - start);
+    return true;
+  }
+#else
+  return false;
+#endif
 }
 
 bool check_access_concurrency(char* sensor_name, uint32 max_concurrent)
 {
+#if !EVAL_NO_AEROGEL
+  int start, end;
+  start = os_time_get_renju_boot_microsecond();
   int i = 0;
   // printf("name: %s\n", sensor_name);
   for(; i < sensor_index_mapping_len; i++){
@@ -1752,19 +1839,31 @@ bool check_access_concurrency(char* sensor_name, uint32 max_concurrent)
       if(sensor_actuator_concurrent_access[i] < max_concurrent){
         // printf("i: %d, access: %u\n",i, sensor_actuator_concurrent_access[i]);
         sensor_actuator_concurrent_access[i]++;
+        end = os_time_get_renju_boot_microsecond();
+        other_checking_overhead += (end - start);
         return false;
       }
+      end = os_time_get_renju_boot_microsecond();
+      other_checking_overhead += (end - start);
       return true;
     }
   }
+  end = os_time_get_renju_boot_microsecond();
+  other_checking_overhead += (end - start);
   return true;
+#else
+  return false;
+#endif
 }
 
 // return true means should not execute.
 bool check_access_energy(WASMModuleInstance* module_inst, char* peripheral_name)
 {
+#if !EVAL_NO_AEROGEL
   uint32 peripheral_id = -1;
   uint32 i = 0;
+  int start, end;
+  start = os_time_get_renju_boot_microsecond();
   for(; i < sensor_index_mapping_len; i++){
     if(strstr(sensor_index_mapping[i], peripheral_name))
     {
@@ -1775,6 +1874,8 @@ bool check_access_energy(WASMModuleInstance* module_inst, char* peripheral_name)
 
   if(peripheral_id == -1) {
     printf("check_access_energy. Sensor: %s not found.\n", peripheral_name);
+    end = os_time_get_renju_boot_microsecond();
+    check_peripheral_overhead += (end - start);
     return true;
   }
 
@@ -1787,19 +1888,30 @@ bool check_access_energy(WASMModuleInstance* module_inst, char* peripheral_name)
       if(cur_time - sensor_info->timestamp > 10000000) {
         sensor_info->timestamp = cur_time;
         sensor_info->used_power = 0;
+        end = os_time_get_renju_boot_microsecond();
+        check_peripheral_overhead += (end - start);
         return false;
       }
 
       sensor_info->used_power += sensor_info->power * 1;
       if(sensor_info->allowed_power_consumption < sensor_info->used_power) {
         sensor_info->used_power = 0;
+        end = os_time_get_renju_boot_microsecond();
+        check_peripheral_overhead += (end - start);
         return true;
       }
       // printf("returned false here.\n");
+      end = os_time_get_renju_boot_microsecond();
+      check_peripheral_overhead += (end - start);
       return false;
     }
   }
+  end = os_time_get_renju_boot_microsecond();
+  check_peripheral_overhead += (end - start);
   return true;
+#else
+  return false;
+#endif
 }
 
 // I need to think about how to implement this function.
@@ -1816,6 +1928,7 @@ void aerogel_sensor_module(WASMModuleInstance* module_inst,
   // printf("Inside aerogel sensor module, module name: %s\n", module_inst->name);
   for(uint32 i = 0 ; i < len_actuator_list; i++){
     char* name = actuator_list[i].actuator_name;
+#if !EVAL_NO_AEROGEL
     char* tmp = device_spec;
     tmp = strstr(tmp, name);
     tmp = strstr(tmp, "concurrent_access:");
@@ -1828,6 +1941,9 @@ void aerogel_sensor_module(WASMModuleInstance* module_inst,
       ++j;
     }
     uint32 max_access = (uint32)atoi(temp);
+#else
+    uint32 max_access = 1000;
+#endif
     // printf("module_name is: %s, name is: %s\n", module_name, name);
     // printf("check_access_name: %d\n", check_access_name(module_name, name));
     // printf("check_access_energy: %d\n", check_access_energy(module_inst, name));
@@ -1852,7 +1968,7 @@ void aerogel_sensor_module(WASMModuleInstance* module_inst,
 
     uint32 repetition = actuator_list[i].repetition;
     uint32 latency = actuator_list[i].latency;
-
+    int native_mcu_start = os_time_get_renju_boot_microsecond();
     for(uint32 k = 0 ; k < repetition; k++){
       if (check_access_energy(module_inst, name)) {
         printf("Actuator %s energy exceeds.\n", name);
@@ -1875,11 +1991,19 @@ void aerogel_sensor_module(WASMModuleInstance* module_inst,
         continue;
       }
     }
+    int native_mcu_end = os_time_get_renju_boot_microsecond();
+    module_inst->native_execution_time_us = (native_mcu_end - native_mcu_start);
+    if(check_cpu_consumption(module_inst)) {
+      printf("Max MCU energy achieved.\n");
+      sleep_us(500000);
+      module_inst->native_execution_time_us = 0;
+    }
   }
 
   // printf("len_sensor_list: %u\n", len_sensor_list);
   for(uint32 i = 0 ; i < len_sensor_list; i++){
     char* name = sensor_list[i].sensor_name;
+#if !EVAL_NO_AEROGEL
     char* tmp = device_spec;
     tmp = strstr(tmp, name);
     tmp = strstr(tmp, "concurrent_access:");
@@ -1891,6 +2015,9 @@ void aerogel_sensor_module(WASMModuleInstance* module_inst,
       ++j;
     }
     uint32 max_access = (uint32)atoi(temp);
+#else
+    uint32 max_access = 10000;
+#endif
     // printf("arrived here.\n");
 
     if(check_access_name(module_name, name)){
@@ -1915,7 +2042,7 @@ void aerogel_sensor_module(WASMModuleInstance* module_inst,
     ret_val[i].len_value = repetition;
     ret_val[i].num_ret_val = wasm_runtime_malloc(sizeof(uint32) * repetition);
     // repetition = repetition > 50 ? 50 : repetition;
-
+    int native_mcu_start = os_time_get_renju_boot_microsecond();
     for(uint32 k = 0 ; k < repetition; k++){
       if(check_access_energy(module_inst, name)) {
         printf("%s denied - excessive energy.\n", name);
@@ -1952,6 +2079,13 @@ void aerogel_sensor_module(WASMModuleInstance* module_inst,
         printf("Error! Unknown sensor with name: %s\n", name);
         continue;
       }
+    }
+    int native_mcu_end = os_time_get_renju_boot_microsecond();
+    module_inst->native_execution_time_us = (native_mcu_end - native_mcu_start);
+    if(check_cpu_consumption(module_inst)) {
+      printf("Max MCU energy achieved.\n");
+      sleep_us(500000);
+      module_inst->native_execution_time_us = 0;
     }
   }
 }

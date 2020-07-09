@@ -1,6 +1,9 @@
+#define EVAL_NO_AEROGEL 1
+
 #ifndef _AEROGEL_
 #define _AEROGEL_
 
+#if !EVAL_NO_AEROGEL
 // The definition of the below variables are for testing purposes in wasm_runtime.c
 // in the same folder.
 extern char* device_spec;
@@ -32,5 +35,6 @@ name:low_mcu,device:imu-10000,mcu:200,memory:500\n\
 name:low_memory,device:imu-10000,mcu:10000,memory:10\n\
 ";
 */
+#endif
 
 #endif
